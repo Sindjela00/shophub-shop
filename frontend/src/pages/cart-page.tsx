@@ -76,6 +76,12 @@ export function CartPage() {
         <span className="text-lg font-semibold">Total</span>
         <span className="text-lg font-semibold">{total} USDT</span>
       </Card>
+
+      <div className="mt-6 flex justify-end">
+        <Link to="/checkout">
+          <Button size="lg">Proceed to payment</Button>
+        </Link>
+      </div>
     </div>
   )
 }
