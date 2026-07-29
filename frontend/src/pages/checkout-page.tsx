@@ -1,0 +1,193 @@
+import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { ArrowLeft, Check, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { useCart } from '@/context/cart-context'
+import { Card } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
+import { delay, generateTxHash, generateWalletAddress } from '@/lib/mock-web3'
+
+type Step = 'review' | 'wallet' | 'pay'
+type PaymentPhase = 'idle' | 'pending' | 'confirming'
+
+const STEPS: { key: Step; label: string }[] = [
+  { key: 'review', label: 'Review' },
+  { key: 'wallet', label: 'Wallet' },
+  { key: 'pay', label: 'Payment' },
+]
+
+export function CheckoutPage() {
+  const { items, total, clear } = useCart()
+  const navigate = useNavigate()
+
+  // Snapshot the order so the summary stays stable once the cart is cleared on success.
+  const [order] = useState({ items, total })
+
+  const [step, setStep] = useState<Step>('review')
+  const [connecting, setConnecting] = useState(false)
+  const [wallet, setWallet] = useState<string | null>(null)
+  const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>('idle')
+
+  if (order.items.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-20 text-center">
+        <p className="text-lg font-medium">You have no items to pay for.</p>
+        <Link to="/" className="mt-4 inline-block">
+          <Button variant="outline">
+            <ArrowLeft className="h-4 w-4" />
+            Back to catalog
+          </Button>
+        </Link>
+      </div>
+    )
+  }
+
+  const currentIndex = STEPS.findIndex((s) => s.key === step)
+
+  const handleConnectWallet = async () => {
+    setConnecting(true)
+    await delay(1200)
+    setWallet(generateWalletAddress())
+    setConnecting(false)
+  }
+
+  const handleConfirmPayment = async () => {
+    setPaymentPhase('pending')
+    await delay(1000)
+    setPaymentPhase('confirming')
+    await delay(1500)
+
+    const txHash = generateTxHash()
+    clear()
+    navigate('/checkout/success', {
+      state: { items: order.items, total: order.total, txHash, wallet },
+    })
+  }
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-8">
+      <h1 className="mb-6 text-2xl font-semibold">Pay with crypto</h1>
+
+      <ol className="mb-8 flex items-center">
+        {STEPS.map((s, i) => (
+          <li key={s.key} className="flex flex-1 items-center last:flex-none">
+            <div className="flex flex-col items-center gap-1.5">
+              <span
+                className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium',
+                  i < currentIndex && 'border-brand-600 bg-brand-600 text-white',
+                  i === currentIndex && 'border-brand-600 text-brand-600 dark:text-brand-400',
+                  i > currentIndex && 'border-neutral-300 text-neutral-400 dark:border-neutral-700',
+                )}
+              >
+                {i < currentIndex ? <Check className="h-4 w-4" /> : i + 1}
+              </span>
+              <span className="text-xs text-neutral-500 dark:text-neutral-400">{s.label}</span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div
+                className={cn(
+                  'mx-2 h-px flex-1',
+                  i < currentIndex ? 'bg-brand-600' : 'bg-neutral-200 dark:bg-neutral-800',
+                )}
+              />
+            )}
+          </li>
+        ))}
+      </ol>
+
+      {step === 'review' && (
+        <Card className="flex flex-col gap-4 p-5">
+          <h2 className="font-medium">Order items</h2>
+          <div className="flex flex-col gap-3">
+            {order.items.map(({ product, quantity }) => (
+              <div key={product.id} className="flex items-center justify-between text-sm">
+                <span>
+                  {product.name} <span className="text-neutral-400">× {quantity}</span>
+                </span>
+                <span className="font-medium">{product.price * quantity} USDT</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center justify-between border-t border-neutral-200 pt-3 text-base font-semibold dark:border-neutral-800">
+            <span>Total</span>
+            <span>{order.total} USDT</span>
+          </div>
+          <Button size="lg" onClick={() => setStep('wallet')}>
+            Continue
+          </Button>
+        </Card>
+      )}
+
+      {step === 'wallet' && (
+        <Card className="flex flex-col items-center gap-4 p-8 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+            <Wallet className="h-7 w-7" />
+          </span>
+
+          {!wallet ? (
+            <>
+              <div>
+                <h2 className="font-medium">Connect your Web3 wallet</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  Simulated MetaMask connection (testnet)
+                </p>
+              </div>
+              <Button size="lg" onClick={handleConnectWallet} disabled={connecting}>
+                {connecting && <Loader2 className="h-4 w-4 animate-spin" />}
+                {connecting ? 'Connecting...' : 'Connect wallet'}
+              </Button>
+            </>
+          ) : (
+            <>
+              <div>
+                <h2 className="font-medium">Wallet connected</h2>
+                <p className="mt-1 font-mono text-sm text-neutral-500 dark:text-neutral-400">{wallet}</p>
+              </div>
+              <Button size="lg" onClick={() => setStep('pay')}>
+                Continue
+              </Button>
+            </>
+          )}
+        </Card>
+      )}
+
+      {step === 'pay' && (
+        <Card className="flex flex-col items-center gap-4 p-8 text-center">
+          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-100 text-brand-700 dark:bg-brand-900/40 dark:text-brand-300">
+            <ShieldCheck className="h-7 w-7" />
+          </span>
+
+          {paymentPhase === 'idle' && (
+            <>
+              <div>
+                <h2 className="font-medium">Confirm payment</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  You are sending <span className="font-semibold">{order.total} USDT</span> from wallet{' '}
+                  <span className="font-mono">{wallet}</span>
+                </p>
+              </div>
+              <Button size="lg" onClick={handleConfirmPayment}>
+                Confirm payment
+              </Button>
+            </>
+          )}
+
+          {paymentPhase === 'pending' && (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-brand-600 dark:text-brand-400" />
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">Transaction sent, awaiting confirmation...</p>
+            </div>
+          )}
+
+          {paymentPhase === 'confirming' && (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-brand-600 dark:text-brand-400" />
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">Confirming on the blockchain...</p>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  )
+}

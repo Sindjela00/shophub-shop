@@ -19,9 +19,9 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         <span>Total</span>
         <span>{total} USDT</span>
       </div>
-      <Link to="/cart" onClick={onClose}>
+      <Link to="/checkout" onClick={onClose}>
         <Button className="w-full" size="lg">
-          View cart
+          Proceed to payment
         </Button>
       </Link>
     </div>
