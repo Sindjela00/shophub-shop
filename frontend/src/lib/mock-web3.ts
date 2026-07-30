@@ -6,10 +6,6 @@ function randomHex(length: number) {
   return out
 }
 
-export function generateWalletAddress() {
-  return `0x${randomHex(4)}...${randomHex(4)}`
-}
-
 export function generateTxHash() {
   return `0x${randomHex(64)}`
 }

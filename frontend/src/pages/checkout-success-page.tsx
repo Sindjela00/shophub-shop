@@ -3,6 +3,7 @@ import { CheckCircle2 } from 'lucide-react'
 import type { CartItem } from '@/data/types'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import { formatAddress } from '@/lib/ethereum'
 
 interface SuccessState {
   items: CartItem[]
@@ -37,7 +38,7 @@ export function CheckoutSuccessPage() {
         <div className="w-full rounded-lg bg-neutral-100 p-4 text-left text-sm dark:bg-neutral-800">
           <div className="flex justify-between gap-4">
             <span className="text-neutral-500 dark:text-neutral-400">Wallet</span>
-            <span className="truncate font-mono">{wallet}</span>
+            <span className="truncate font-mono">{wallet && formatAddress(wallet)}</span>
           </div>
           <div className="mt-2 flex justify-between gap-4">
             <span className="text-neutral-500 dark:text-neutral-400">Tx hash</span>

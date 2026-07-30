@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, Loader2, ShieldCheck, Wallet } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Check, ExternalLink, Loader2, ShieldCheck, Wallet } from 'lucide-react'
 import { useCart } from '@/context/cart-context'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { delay, generateTxHash, generateWalletAddress } from '@/lib/mock-web3'
+import { delay, generateTxHash } from '@/lib/mock-web3'
+import { formatAddress, SEPOLIA_CHAIN } from '@/lib/ethereum'
+import { useMetaMask } from '@/hooks/use-metamask'
 
 type Step = 'review' | 'wallet' | 'pay'
 type PaymentPhase = 'idle' | 'pending' | 'confirming'
@@ -19,13 +21,12 @@ const STEPS: { key: Step; label: string }[] = [
 export function CheckoutPage() {
   const { items, total, clear } = useCart()
   const navigate = useNavigate()
+  const wallet = useMetaMask()
 
   // Snapshot the order so the summary stays stable once the cart is cleared on success.
   const [order] = useState({ items, total })
 
   const [step, setStep] = useState<Step>('review')
-  const [connecting, setConnecting] = useState(false)
-  const [wallet, setWallet] = useState<string | null>(null)
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>('idle')
 
   if (order.items.length === 0) {
@@ -44,13 +45,6 @@ export function CheckoutPage() {
 
   const currentIndex = STEPS.findIndex((s) => s.key === step)
 
-  const handleConnectWallet = async () => {
-    setConnecting(true)
-    await delay(1200)
-    setWallet(generateWalletAddress())
-    setConnecting(false)
-  }
-
   const handleConfirmPayment = async () => {
     setPaymentPhase('pending')
     await delay(1000)
@@ -60,7 +54,7 @@ export function CheckoutPage() {
     const txHash = generateTxHash()
     clear()
     navigate('/checkout/success', {
-      state: { items: order.items, total: order.total, txHash, wallet },
+      state: { items: order.items, total: order.total, txHash, wallet: wallet.address },
     })
   }
 
@@ -125,24 +119,63 @@ export function CheckoutPage() {
             <Wallet className="h-7 w-7" />
           </span>
 
-          {!wallet ? (
+          {!wallet.isInstalled && (
+            <>
+              <div>
+                <h2 className="font-medium">MetaMask not detected</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  Install the MetaMask browser extension to pay with crypto.
+                </p>
+              </div>
+              <a href="https://metamask.io/download/" target="_blank" rel="noreferrer">
+                <Button size="lg" variant="outline">
+                  <ExternalLink className="h-4 w-4" />
+                  Install MetaMask
+                </Button>
+              </a>
+            </>
+          )}
+
+          {wallet.isInstalled && (wallet.status === 'disconnected' || wallet.status === 'connecting') && (
             <>
               <div>
                 <h2 className="font-medium">Connect your Web3 wallet</h2>
                 <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-                  Simulated MetaMask connection (testnet)
+                  Connect MetaMask on the {SEPOLIA_CHAIN.chainName} testnet
                 </p>
               </div>
-              <Button size="lg" onClick={handleConnectWallet} disabled={connecting}>
-                {connecting && <Loader2 className="h-4 w-4 animate-spin" />}
-                {connecting ? 'Connecting...' : 'Connect wallet'}
+              <Button size="lg" onClick={wallet.connect} disabled={wallet.status === 'connecting'}>
+                {wallet.status === 'connecting' && <Loader2 className="h-4 w-4 animate-spin" />}
+                {wallet.status === 'connecting' ? 'Connecting...' : 'Connect wallet'}
               </Button>
+              {wallet.error && <p className="text-sm text-red-600 dark:text-red-400">{wallet.error}</p>}
             </>
-          ) : (
+          )}
+
+          {(wallet.status === 'wrong-network' || wallet.status === 'switching-network') && (
+            <>
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+              <div>
+                <h2 className="font-medium">Wrong network</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  Switch MetaMask to the {SEPOLIA_CHAIN.chainName} testnet to continue.
+                </p>
+              </div>
+              <Button size="lg" onClick={wallet.switchNetwork} disabled={wallet.status === 'switching-network'}>
+                {wallet.status === 'switching-network' && <Loader2 className="h-4 w-4 animate-spin" />}
+                {wallet.status === 'switching-network' ? 'Switching...' : `Switch to ${SEPOLIA_CHAIN.chainName}`}
+              </Button>
+              {wallet.error && <p className="text-sm text-red-600 dark:text-red-400">{wallet.error}</p>}
+            </>
+          )}
+
+          {wallet.status === 'connected' && wallet.address && (
             <>
               <div>
                 <h2 className="font-medium">Wallet connected</h2>
-                <p className="mt-1 font-mono text-sm text-neutral-500 dark:text-neutral-400">{wallet}</p>
+                <p className="mt-1 font-mono text-sm text-neutral-500 dark:text-neutral-400">
+                  {formatAddress(wallet.address)}
+                </p>
               </div>
               <Button size="lg" onClick={() => setStep('pay')}>
                 Continue
@@ -164,7 +197,7 @@ export function CheckoutPage() {
                 <h2 className="font-medium">Confirm payment</h2>
                 <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
                   You are sending <span className="font-semibold">{order.total} USDT</span> from wallet{' '}
-                  <span className="font-mono">{wallet}</span>
+                  <span className="font-mono">{wallet.address && formatAddress(wallet.address)}</span>
                 </p>
               </div>
               <Button size="lg" onClick={handleConfirmPayment}>
