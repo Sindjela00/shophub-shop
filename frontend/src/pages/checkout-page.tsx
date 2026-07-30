@@ -64,8 +64,8 @@ export function CheckoutPage() {
   }
 
   const currentIndex = STEPS.findIndex((s) => s.key === step);
-  const canGoBack = currentIndex > 0 && paymentPhase === "idle";
-  const handleBack = () => setStep(STEPS[currentIndex - 1].key);
+  // Mid-transaction, don't let the user leave or jump between steps.
+  const canNavigate = paymentPhase === "idle";
 
   const handleConfirmPayment = async () => {
     setPaymentPhase("pending");
@@ -88,52 +88,61 @@ export function CheckoutPage() {
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
-      {canGoBack && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleBack}
-          className="-ml-2 mb-3"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back
-        </Button>
+      {canNavigate && (
+        <Link to="/" className="-ml-2 mb-3 inline-block">
+          <Button variant="ghost" size="sm">
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+        </Link>
       )}
       <h1 className="mb-6 text-2xl font-semibold">Pay with crypto</h1>
 
       <ol className="mb-8 flex items-center">
-        {STEPS.map((s, i) => (
-          <li key={s.key} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-1.5">
-              <span
+        {STEPS.map((s, i) => {
+          const reachable = i < currentIndex && canNavigate;
+          return (
+            <li key={s.key} className="flex flex-1 items-center last:flex-none">
+              <button
+                type="button"
+                onClick={reachable ? () => setStep(s.key) : undefined}
+                disabled={!reachable}
                 className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium",
-                  i < currentIndex &&
-                    "border-brand-600 bg-brand-600 text-white",
-                  i === currentIndex &&
-                    "border-brand-600 text-brand-600 dark:text-brand-400",
-                  i > currentIndex &&
-                    "border-neutral-300 text-neutral-400 dark:border-neutral-700",
+                  "group flex flex-col items-center gap-1.5 disabled:pointer-events-none",
+                  reachable && "cursor-pointer",
                 )}
               >
-                {i < currentIndex ? <Check className="h-4 w-4" /> : i + 1}
-              </span>
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
-                {s.label}
-              </span>
-            </div>
-            {i < STEPS.length - 1 && (
-              <div
-                className={cn(
-                  "mx-2 h-px flex-1",
-                  i < currentIndex
-                    ? "bg-brand-600"
-                    : "bg-neutral-200 dark:bg-neutral-800",
-                )}
-              />
-            )}
-          </li>
-        ))}
+                <span
+                  className={cn(
+                    "flex h-8 w-8 items-center justify-center rounded-full border text-sm font-medium transition-colors",
+                    i < currentIndex &&
+                      "border-brand-600 bg-brand-600 text-white",
+                    i === currentIndex &&
+                      "border-brand-600 text-brand-600 dark:text-brand-400",
+                    i > currentIndex &&
+                      "border-neutral-300 text-neutral-400 dark:border-neutral-700",
+                    reachable && "group-hover:opacity-80",
+                  )}
+                >
+                  {i < currentIndex ? <Check className="h-4 w-4" /> : i + 1}
+                </span>
+                <span className="text-xs text-neutral-500 dark:text-neutral-400">
+                  {s.label}
+                </span>
+              </button>
+              {i < STEPS.length - 1 && (
+                <div
+                  className={cn(
+                    "mx-2 h-px flex-1",
+                    i < currentIndex
+                      ? "bg-brand-600"
+                      : "bg-neutral-200 dark:bg-neutral-800",
+                  )}
+                />
+              )}
+            </li>
+          );
+        })}
       </ol>
 
       {step === "review" && (
