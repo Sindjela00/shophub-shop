@@ -34,7 +34,7 @@ export function Header() {
         <button
           type="button"
           onClick={() => setCartOpen(true)}
-          className="relative flex h-10 w-10 items-center justify-center rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800"
           aria-label="Open cart"
         >
           <ShoppingCart className={cn('h-5 w-5', bump && 'animate-cart-bump')} />

@@ -78,7 +78,7 @@ export function ProductPage() {
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  className="flex h-9 w-9 items-center justify-center cursor-pointer rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   aria-label="Decrease quantity"
                 >
                   <Minus className="h-4 w-4" />
@@ -87,7 +87,7 @@ export function ProductPage() {
                 <button
                   type="button"
                   onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-                  className="flex h-9 w-9 items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                  className="flex h-9 w-9 items-center justify-center cursor-pointer rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                   aria-label="Increase quantity"
                 >
                   <Plus className="h-4 w-4" />
