@@ -33,7 +33,7 @@ export function Sheet({ open, onClose, title, footer, children }: SheetProps) {
       )}
       aria-hidden={!open}
     >
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="absolute inset-0 cursor-pointer bg-black/40" onClick={onClose} />
       <div
         className={cn(
           'absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-xl transition-transform duration-300 dark:bg-neutral-900',
@@ -47,7 +47,7 @@ export function Sheet({ open, onClose, title, footer, children }: SheetProps) {
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
+            className="cursor-pointer rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900 dark:hover:bg-neutral-800 dark:hover:text-neutral-100"
             aria-label="Close"
           >
             <X className="h-5 w-5" />

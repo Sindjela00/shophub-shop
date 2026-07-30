@@ -10,14 +10,11 @@ type CartAction =
   | { type: 'REMOVE_ITEM'; productId: string }
   | { type: 'SET_QUANTITY'; productId: string; quantity: number }
   | { type: 'CLEAR' }
-  | { type: 'HYDRATE'; items: CartItem[] }
 
 const STORAGE_KEY = 'shophub-shop-cart'
 
 function cartReducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
-    case 'HYDRATE':
-      return { items: action.items }
     case 'ADD_ITEM': {
       const existing = state.items.find((item) => item.product.id === action.product.id)
       if (existing) {
@@ -60,20 +57,22 @@ interface CartContextValue {
 
 const CartContext = createContext<CartContextValue | null>(null)
 
-export function CartProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(cartReducer, { items: [] })
-
-  useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      try {
-        const items = JSON.parse(raw) as CartItem[]
-        dispatch({ type: 'HYDRATE', items })
-      } catch {
-        // ignore corrupted local storage payload
-      }
+// Read synchronously on first render (not in an effect) so consumers that snapshot
+// items on mount — e.g. the checkout page — never see a transient empty cart.
+function loadInitialCart(): CartState {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  if (raw) {
+    try {
+      return { items: JSON.parse(raw) as CartItem[] }
+    } catch {
+      // ignore corrupted local storage payload
     }
-  }, [])
+  }
+  return { items: [] }
+}
+
+export function CartProvider({ children }: { children: ReactNode }) {
+  const [state, dispatch] = useReducer(cartReducer, undefined, loadInitialCart)
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items))

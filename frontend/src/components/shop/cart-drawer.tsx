@@ -19,9 +19,9 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         <span>Total</span>
         <span>{total} USDT</span>
       </div>
-      <Link to="/cart" onClick={onClose}>
+      <Link to="/checkout" onClick={onClose}>
         <Button className="w-full" size="lg">
-          View cart
+          Proceed to payment
         </Button>
       </Link>
     </div>
@@ -45,7 +45,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                   <button
                     type="button"
                     onClick={() => removeItem(product.id)}
-                    className="text-neutral-400 hover:text-red-600"
+                    className="cursor-pointer text-neutral-400 hover:text-red-600"
                     aria-label="Remove item"
                   >
                     <Trash2 className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                   <button
                     type="button"
                     onClick={() => setQuantity(product.id, quantity - 1)}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
                     aria-label="Decrease quantity"
                   >
                     <Minus className="h-3.5 w-3.5" />
@@ -66,7 +66,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                     type="button"
                     onClick={() => setQuantity(product.id, quantity + 1)}
                     disabled={quantity >= product.stock}
-                    className="flex h-7 w-7 items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+                    className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-neutral-300 hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
                     aria-label="Increase quantity"
                   >
                     <Plus className="h-3.5 w-3.5" />
