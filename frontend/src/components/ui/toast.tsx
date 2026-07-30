@@ -22,7 +22,7 @@ export function ToastViewport({ toasts, onDismiss }: ToastViewportProps) {
           <button
             type="button"
             onClick={() => onDismiss(t.id)}
-            className="ml-2 text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
+            className="ml-2 cursor-pointer text-neutral-400 hover:text-neutral-900 dark:hover:text-neutral-100"
             aria-label="Dismiss"
           >
             ×
