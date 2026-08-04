@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Shop.Api.Auth;
 using Shop.Api.Data;
-using Shop.Api.Endpoints;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 builder.Services.AddOpenApi();
+builder.Services.AddScoped<AdminApiKeyFilter>();
 builder.Services.AddDbContext<ShopDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
 
@@ -20,7 +22,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapArticleEndpoints();
+app.MapControllers();
 
 app.Run();
 
