@@ -6,6 +6,8 @@ namespace Shop.Api.Data;
 public class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbContext(options)
 {
     public DbSet<Article> Articles => Set<Article>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -15,6 +17,23 @@ public class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbContext(
             entity.Property(a => a.Category).HasMaxLength(100);
             entity.Property(a => a.Price).HasPrecision(18, 2);
             entity.HasIndex(a => a.Category);
+        });
+
+        modelBuilder.Entity<Order>(entity =>
+        {
+            entity.Property(o => o.WalletAddress).HasMaxLength(100);
+            entity.Property(o => o.TxHash).HasMaxLength(150);
+            entity.Property(o => o.Total).HasPrecision(18, 2);
+            entity.HasMany(o => o.Items)
+                .WithOne()
+                .HasForeignKey(i => i.OrderId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<OrderItem>(entity =>
+        {
+            entity.Property(i => i.ArticleName).HasMaxLength(200);
+            entity.Property(i => i.UnitPrice).HasPrecision(18, 2);
         });
     }
 }
