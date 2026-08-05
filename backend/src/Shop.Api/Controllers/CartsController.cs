@@ -206,7 +206,9 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
         var result = await orderService.CreateAsync(request.WalletAddress, request.TxHash, items);
         if (!result.Success)
         {
-            return StatusCode(result.StatusCode, new ErrorResponse(result.Error!));
+            return result.IsPending
+                ? StatusCode(result.StatusCode, new PendingResponse(result.Error!))
+                : StatusCode(result.StatusCode, new ErrorResponse(result.Error!));
         }
 
         db.CartItems.RemoveRange(cart.Items);

@@ -6,10 +6,14 @@ namespace Shop.Api.Services;
 
 public record CreateOrderItem(Guid ArticleId, int Quantity);
 
-public record OrderCreationResult(bool Success, Order? Order, string? Error, int StatusCode)
+public record OrderCreationResult(bool Success, bool IsPending, Order? Order, string? Error, int StatusCode)
 {
-    public static OrderCreationResult Ok(Order order) => new(true, order, null, StatusCodes.Status201Created);
-    public static OrderCreationResult Fail(string error, int statusCode) => new(false, null, error, statusCode);
+    public static OrderCreationResult Ok(Order order) => new(true, false, order, null, StatusCodes.Status201Created);
+
+    public static OrderCreationResult Pending(string reason) =>
+        new(false, true, null, reason, StatusCodes.Status202Accepted);
+
+    public static OrderCreationResult Fail(string error, int statusCode) => new(false, false, null, error, statusCode);
 }
 
 /// <summary>
@@ -69,7 +73,7 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
                 // Not resolved yet, not rejected either — the caller should poll again rather
                 // than treat this as a dead end. A freshly-broadcast transaction is essentially
                 // never mined by the time eth_sendTransaction returns its hash.
-                return OrderCreationResult.Fail(verification.Error!, StatusCodes.Status202Accepted);
+                return OrderCreationResult.Pending(verification.Error!);
             case PaymentVerificationStatus.Failed:
                 return OrderCreationResult.Fail(verification.Error!, StatusCodes.Status402PaymentRequired);
         }
