@@ -27,7 +27,8 @@ public class SepoliaTokenPaymentVerificationService(
         var opts = options.Value;
         if (string.IsNullOrWhiteSpace(opts.ReceivingWalletAddress))
         {
-            return PaymentVerificationResult.Fail("Payment receiving wallet is not configured.");
+            // A misconfiguration, not something that resolves itself — no point retrying.
+            return PaymentVerificationResult.Failed("Payment receiving wallet is not configured.");
         }
 
         JsonElement receipt;
@@ -37,18 +38,21 @@ public class SepoliaTokenPaymentVerificationService(
         }
         catch (Exception ex)
         {
+            // Could be a transient RPC hiccup — worth retrying rather than failing outright.
             logger.LogError(ex, "Failed to fetch transaction receipt for {TxHash}", txHash);
-            return PaymentVerificationResult.Fail("Could not reach the blockchain RPC to verify the transaction.");
+            return PaymentVerificationResult.Pending("Could not reach the blockchain RPC to verify the transaction.");
         }
 
         if (receipt.ValueKind != JsonValueKind.Object)
         {
-            return PaymentVerificationResult.Fail("Transaction not found (it may not be mined yet).");
+            // eth_sendTransaction returns the hash the moment it's broadcast — the transaction
+            // is essentially never mined yet by the time a caller gets here. Keep polling.
+            return PaymentVerificationResult.Pending("Transaction not found (it may not be mined yet).");
         }
 
         if (receipt.GetProperty("status").GetString() != "0x1")
         {
-            return PaymentVerificationResult.Fail("Transaction failed on-chain.");
+            return PaymentVerificationResult.Failed("Transaction failed on-chain.");
         }
 
         var expectedSmallestUnit = TokenAmount.ToSmallestUnit(expectedAmount, opts.TokenDecimals);
@@ -82,14 +86,16 @@ public class SepoliaTokenPaymentVerificationService(
             var amount = ParseUint256(log.GetProperty("data").GetString()!);
             if (amount >= expectedSmallestUnit)
             {
-                return PaymentVerificationResult.Ok();
+                return PaymentVerificationResult.Verified();
             }
 
-            return PaymentVerificationResult.Fail(
+            // The transaction is mined and its logs are final — this amount will never change.
+            return PaymentVerificationResult.Failed(
                 $"Payment amount too low: transferred {amount}, expected at least {expectedSmallestUnit} (smallest token unit).");
         }
 
-        return PaymentVerificationResult.Fail(
+        // Mined with no matching log — also final, retrying the same tx hash won't help.
+        return PaymentVerificationResult.Failed(
             "No matching token transfer found in this transaction (wrong token, sender, or recipient).");
     }
 

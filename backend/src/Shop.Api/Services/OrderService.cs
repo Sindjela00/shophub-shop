@@ -63,9 +63,15 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
         var total = items.Sum(i => articles[i.ArticleId].Price * i.Quantity);
 
         var verification = await paymentVerification.VerifyAsync(txHash, walletAddress, total, cancellationToken);
-        if (!verification.Success)
+        switch (verification.Status)
         {
-            return OrderCreationResult.Fail(verification.Error!, StatusCodes.Status402PaymentRequired);
+            case PaymentVerificationStatus.Pending:
+                // Not resolved yet, not rejected either — the caller should poll again rather
+                // than treat this as a dead end. A freshly-broadcast transaction is essentially
+                // never mined by the time eth_sendTransaction returns its hash.
+                return OrderCreationResult.Fail(verification.Error!, StatusCodes.Status202Accepted);
+            case PaymentVerificationStatus.Failed:
+                return OrderCreationResult.Fail(verification.Error!, StatusCodes.Status402PaymentRequired);
         }
 
         var order = new Order
