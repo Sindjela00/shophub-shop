@@ -33,7 +33,7 @@ public class OrdersController(ShopDbContext db, OrderService orderService) : Con
 
         if (!result.Success)
         {
-            return StatusCode(result.StatusCode, result.Error);
+            return StatusCode(result.StatusCode, new ErrorResponse(result.Error!));
         }
 
         // No get-by-id endpoint is in scope yet, so there's no resource URI to point to.

@@ -33,7 +33,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
     {
         if (request.Quantity <= 0)
         {
-            return BadRequest("Quantity must be positive.");
+            return BadRequest(new ErrorResponse("Quantity must be positive."));
         }
 
         var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
@@ -45,14 +45,14 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
         var article = await db.Articles.FindAsync(request.ArticleId);
         if (article is null)
         {
-            return BadRequest($"Article {request.ArticleId} not found.");
+            return BadRequest(new ErrorResponse($"Article {request.ArticleId} not found."));
         }
 
         var existing = cart.Items.FirstOrDefault(i => i.ArticleId == request.ArticleId);
         var newQuantity = (existing?.Quantity ?? 0) + request.Quantity;
         if (newQuantity > article.Stock)
         {
-            return BadRequest($"Insufficient stock for '{article.Name}': {article.Stock} available.");
+            return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available."));
         }
 
         if (existing is not null)
@@ -96,12 +96,12 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             var article = await db.Articles.FindAsync(articleId);
             if (article is null)
             {
-                return BadRequest($"Article {articleId} not found.");
+                return BadRequest(new ErrorResponse($"Article {articleId} not found."));
             }
 
             if (request.Quantity > article.Stock)
             {
-                return BadRequest($"Insufficient stock for '{article.Name}': {article.Stock} available.");
+                return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available."));
             }
 
             existing.Quantity = request.Quantity;
@@ -139,7 +139,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
     {
         if (string.IsNullOrWhiteSpace(request.WalletAddress))
         {
-            return BadRequest("WalletAddress is required.");
+            return BadRequest(new ErrorResponse("WalletAddress is required."));
         }
 
         var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
@@ -150,7 +150,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
 
         if (cart.Items.Count == 0)
         {
-            return BadRequest("Cart is empty.");
+            return BadRequest(new ErrorResponse("Cart is empty."));
         }
 
         var articleIds = cart.Items.Select(i => i.ArticleId).ToList();
@@ -159,7 +159,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
         var missingIds = articleIds.Except(articles.Keys).ToList();
         if (missingIds.Count > 0)
         {
-            return BadRequest($"Article(s) not found: {string.Join(", ", missingIds)}.");
+            return BadRequest(new ErrorResponse($"Article(s) not found: {string.Join(", ", missingIds)}."));
         }
 
         foreach (var item in cart.Items)
@@ -167,14 +167,14 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             var article = articles[item.ArticleId];
             if (article.Stock < item.Quantity)
             {
-                return BadRequest($"Insufficient stock for '{article.Name}': {article.Stock} available, {item.Quantity} requested.");
+                return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available, {item.Quantity} requested."));
             }
         }
 
         var opts = paymentOptions.Value;
         if (string.IsNullOrWhiteSpace(opts.ReceivingWalletAddress))
         {
-            return StatusCode(StatusCodes.Status500InternalServerError, "Payment receiving wallet is not configured.");
+            return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse("Payment receiving wallet is not configured."));
         }
 
         var total = cart.Items.Sum(i => articles[i.ArticleId].Price * i.Quantity);
@@ -199,14 +199,14 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
 
         if (cart.Items.Count == 0)
         {
-            return BadRequest("Cart is empty.");
+            return BadRequest(new ErrorResponse("Cart is empty."));
         }
 
         var items = cart.Items.Select(i => new CreateOrderItem(i.ArticleId, i.Quantity)).ToList();
         var result = await orderService.CreateAsync(request.WalletAddress, request.TxHash, items);
         if (!result.Success)
         {
-            return StatusCode(result.StatusCode, result.Error);
+            return StatusCode(result.StatusCode, new ErrorResponse(result.Error!));
         }
 
         db.CartItems.RemoveRange(cart.Items);
