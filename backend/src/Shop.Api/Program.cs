@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Shop.Api.Auth;
 using Shop.Api.Data;
+using Shop.Api.Observability;
 using Shop.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddObservability();
 
 const string DevCorsPolicy = "DevCors";
 builder.Services.AddCors(options =>
@@ -24,6 +27,9 @@ builder.Services.AddDbContext<ShopDbContext>(options =>
 
 var app = builder.Build();
 
+// First, so every request is counted even if later middleware redirects/short-circuits it.
+app.UseMiddleware<TrafficMetricsMiddleware>();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -36,6 +42,7 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 
 app.MapControllers();
+app.MapPrometheusScrapingEndpoint();
 
 app.Run();
 
