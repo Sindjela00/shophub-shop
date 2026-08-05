@@ -51,7 +51,7 @@ public class SepoliaTokenPaymentVerificationService(
             return PaymentVerificationResult.Fail("Transaction failed on-chain.");
         }
 
-        var expectedSmallestUnit = ToSmallestUnit(expectedAmount, opts.TokenDecimals);
+        var expectedSmallestUnit = TokenAmount.ToSmallestUnit(expectedAmount, opts.TokenDecimals);
 
         foreach (var log in receipt.GetProperty("logs").EnumerateArray())
         {
@@ -112,15 +112,4 @@ public class SepoliaTokenPaymentVerificationService(
 
     private static BigInteger ParseUint256(string hexData) =>
         new(Convert.FromHexString(hexData[2..]), isUnsigned: true, isBigEndian: true);
-
-    private static BigInteger ToSmallestUnit(decimal amount, int decimals)
-    {
-        var multiplier = 1m;
-        for (var i = 0; i < decimals; i++)
-        {
-            multiplier *= 10m;
-        }
-
-        return new BigInteger(amount * multiplier);
-    }
 }

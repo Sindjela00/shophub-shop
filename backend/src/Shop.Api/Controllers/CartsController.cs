@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Shop.Api.Contracts;
 using Shop.Api.Data;
 using Shop.Api.Models;
@@ -9,7 +10,7 @@ namespace Shop.Api.Controllers;
 
 [ApiController]
 [Route("api/carts")]
-public class CartsController(ShopDbContext db, OrderService orderService) : ControllerBase
+public class CartsController(ShopDbContext db, OrderService orderService, IOptions<PaymentOptions> paymentOptions) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<CartDto>> Create()
@@ -128,6 +129,61 @@ public class CartsController(ShopDbContext db, OrderService orderService) : Cont
         db.CartItems.Remove(existing);
         await db.SaveChangesAsync();
         return Ok(await BuildDto(cart));
+    }
+
+    // Builds the unsigned ERC-20 transfer the customer needs to sign: the backend is the
+    // source of truth for the amount/token/recipient, so the frontend just hands this
+    // straight to eth_sendTransaction rather than constructing it itself.
+    [HttpPost("{cartId:guid}/checkout/prepare")]
+    public async Task<ActionResult<PendingPaymentDto>> PrepareCheckout(Guid cartId, PrepareCheckoutRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.WalletAddress))
+        {
+            return BadRequest("WalletAddress is required.");
+        }
+
+        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        if (cart is null)
+        {
+            return NotFound();
+        }
+
+        if (cart.Items.Count == 0)
+        {
+            return BadRequest("Cart is empty.");
+        }
+
+        var articleIds = cart.Items.Select(i => i.ArticleId).ToList();
+        var articles = await db.Articles.Where(a => articleIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id);
+
+        var missingIds = articleIds.Except(articles.Keys).ToList();
+        if (missingIds.Count > 0)
+        {
+            return BadRequest($"Article(s) not found: {string.Join(", ", missingIds)}.");
+        }
+
+        foreach (var item in cart.Items)
+        {
+            var article = articles[item.ArticleId];
+            if (article.Stock < item.Quantity)
+            {
+                return BadRequest($"Insufficient stock for '{article.Name}': {article.Stock} available, {item.Quantity} requested.");
+            }
+        }
+
+        var opts = paymentOptions.Value;
+        if (string.IsNullOrWhiteSpace(opts.ReceivingWalletAddress))
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError, "Payment receiving wallet is not configured.");
+        }
+
+        var total = cart.Items.Sum(i => articles[i.ArticleId].Price * i.Quantity);
+        var amountSmallestUnit = TokenAmount.ToSmallestUnit(total, opts.TokenDecimals);
+        var data = Erc20TransferEncoder.EncodeTransferCallData(opts.ReceivingWalletAddress, amountSmallestUnit);
+
+        // Stock isn't reserved here — it's re-checked authoritatively when /checkout is
+        // called with the resulting txHash, same as it would be for a stale prepared cart.
+        return Ok(new PendingPaymentDto(To: opts.TokenContractAddress, Data: data, Value: "0x0", Total: total));
     }
 
     // Submits an already-sent crypto payment; verifies it on-chain and, only if valid,
