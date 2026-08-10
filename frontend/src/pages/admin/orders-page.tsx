@@ -1,18 +1,66 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { ChevronRight, ReceiptText } from 'lucide-react'
 import { Card } from '@/components/ui/card'
-import { orders } from '@/data/orders'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useAdminAuth } from '@/context/admin-auth-context'
+import { useToast } from '@/context/toast-context'
+import { ApiError, listOrders } from '@/lib/api'
+import type { Order } from '@/data/types'
 import { SEPOLIA_CHAIN, formatAddress } from '@/lib/ethereum'
 import { cn } from '@/lib/utils'
 
 export function OrdersPage() {
+  const { adminKey, clearAdminKey } = useAdminAuth()
+  const { toast } = useToast()
+  const [orders, setOrders] = useState<Order[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!adminKey) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    listOrders(adminKey)
+      .then((data) => {
+        if (cancelled) return
+        setOrders(data)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (err instanceof ApiError && err.status === 401) {
+          clearAdminKey()
+          toast('Invalid admin key')
+        } else {
+          setError('Could not load orders.')
+        }
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminKey])
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="mb-6 text-2xl font-semibold">Orders</h1>
 
-      {orders.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+          {error}
+        </div>
+      ) : orders.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center text-neutral-500 dark:text-neutral-400">
           <ReceiptText className="h-10 w-10" strokeWidth={1.5} />
           <p>No orders yet.</p>
@@ -56,7 +104,7 @@ export function OrdersPage() {
                         </a>
                       </td>
                       <td className="px-4 py-3">{order.items.reduce((sum, i) => sum + i.quantity, 0)}</td>
-                      <td className="px-4 py-3 text-right font-medium">{order.total} USDT</td>
+                      <td className="px-4 py-3 text-right font-medium">{order.total} USDC</td>
                     </tr>
                     <tr className="bg-neutral-50 dark:bg-neutral-900/50">
                       <td />
@@ -74,7 +122,7 @@ export function OrdersPage() {
                                   <span>
                                     {item.articleName} <span className="text-neutral-400">× {item.quantity}</span>
                                   </span>
-                                  <span>{item.unitPrice * item.quantity} USDT</span>
+                                  <span>{item.unitPrice * item.quantity} USDC</span>
                                 </div>
                               ))}
                             </div>

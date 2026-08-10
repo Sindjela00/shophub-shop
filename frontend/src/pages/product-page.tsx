@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Minus, Plus, ShoppingCart } from 'lucide-react'
-import { products } from '@/data/products'
+import { getArticle } from '@/lib/api'
+import type { Product } from '@/data/types'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Breadcrumb } from '@/components/ui/breadcrumb'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ProductThumbnail } from '@/components/shop/product-thumbnail'
 import { useCart } from '@/context/cart-context'
 import { useToast } from '@/context/toast-context'
-import { CATEGORY_BADGE_CLASS } from '@/lib/category-style'
+import { categoryBadgeClass } from '@/lib/category-style'
 
 export function ProductPage() {
   const { id } = useParams()
@@ -17,9 +19,49 @@ export function ProductPage() {
   const { toast } = useToast()
   const [quantity, setQuantity] = useState(1)
 
-  const product = products.find((p) => p.id === id)
+  const [product, setProduct] = useState<Product | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [notFound, setNotFound] = useState(false)
 
-  if (!product) {
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+    setLoading(true)
+    setNotFound(false)
+    getArticle(id)
+      .then((article) => {
+        if (cancelled) return
+        setProduct(article)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setNotFound(true)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [id])
+
+  if (loading) {
+    return (
+      <div className="mx-auto max-w-4xl px-4 py-8">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
+          <Skeleton className="aspect-square w-full" />
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-6 w-24" />
+            <Skeleton className="h-8 w-2/3" />
+            <Skeleton className="h-20 w-full" />
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  if (notFound || !product) {
     return (
       <div className="mx-auto max-w-3xl px-4 py-16 text-center">
         <p className="text-lg font-medium">Product not found.</p>
@@ -56,14 +98,14 @@ export function ProductPage() {
 
         <div className="flex flex-col gap-4">
           <div>
-            <Badge className={CATEGORY_BADGE_CLASS[product.category]}>{product.category}</Badge>
+            <Badge className={categoryBadgeClass(product.category)}>{product.category}</Badge>
             <h1 className="mt-2 text-2xl font-semibold">{product.name}</h1>
           </div>
 
           <p className="text-neutral-600 dark:text-neutral-300">{product.description}</p>
 
           <div className="flex items-center gap-3">
-            <span className="text-2xl font-semibold">{product.price} USDT</span>
+            <span className="text-2xl font-semibold">{product.price} USDC</span>
             {outOfStock ? (
               <Badge variant="destructive">Out of stock</Badge>
             ) : (
@@ -104,7 +146,7 @@ export function ProductPage() {
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-between gap-4 border-t border-neutral-200 bg-white/95 p-4 backdrop-blur sm:hidden dark:border-neutral-800 dark:bg-neutral-950/95">
-        <span className="text-lg font-semibold">{product.price} USDT</span>
+        <span className="text-lg font-semibold">{product.price} USDC</span>
         <Button size="lg" disabled={outOfStock} onClick={handleAddToCart} className="flex-1">
           <ShoppingCart className="h-4 w-4" />
           Add to cart
