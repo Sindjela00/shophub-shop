@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
+using Shop.Api.Contracts;
 
 namespace Shop.Api.Auth;
 
@@ -17,7 +18,7 @@ public class AdminApiKeyFilter(IConfiguration configuration) : IAsyncActionFilte
         var configuredKey = configuration["Admin:ApiKey"];
         if (string.IsNullOrEmpty(configuredKey))
         {
-            context.Result = new ObjectResult("Admin API key is not configured.")
+            context.Result = new ObjectResult(new ErrorResponse("Admin API key is not configured."))
             {
                 StatusCode = StatusCodes.Status500InternalServerError,
             };
