@@ -1,20 +1,58 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Package, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Dialog } from '@/components/ui/dialog'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/context/toast-context'
-import { initialArticles } from '@/data/articles'
+import { useAdminAuth } from '@/context/admin-auth-context'
+import { ApiError, createArticle, deleteArticle, listArticles, updateArticle } from '@/lib/api'
 import type { Article } from '@/data/types'
 import { ArticleFormDialog, type ArticleFormValues } from './article-form-dialog'
 
 export function ArticlesPage() {
   const { toast } = useToast()
-  const [articles, setArticles] = useState<Article[]>(initialArticles)
+  const { adminKey, clearAdminKey } = useAdminAuth()
+  const [articles, setArticles] = useState<Article[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<Article | undefined>(undefined)
   const [deleting, setDeleting] = useState<Article | undefined>(undefined)
+  const [saving, setSaving] = useState(false)
+
+  const handleAuthError = (err: unknown) => {
+    if (err instanceof ApiError && err.status === 401) {
+      clearAdminKey()
+      toast('Invalid admin key')
+      return true
+    }
+    return false
+  }
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    listArticles()
+      .then((data) => {
+        if (cancelled) return
+        setArticles(data)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        if (!handleAuthError(err)) setError('Could not load articles.')
+      })
+      .finally(() => {
+        if (cancelled) return
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const openCreate = () => {
     setEditing(undefined)
@@ -26,22 +64,42 @@ export function ArticlesPage() {
     setFormOpen(true)
   }
 
-  const handleSave = (values: ArticleFormValues) => {
-    if (editing) {
-      setArticles((current) => current.map((a) => (a.id === editing.id ? { ...a, ...values } : a)))
-      toast(`Updated ${values.name}`)
-    } else {
-      const article: Article = { id: crypto.randomUUID(), ...values }
-      setArticles((current) => [...current, article])
-      toast(`Added ${values.name}`)
+  const handleSave = async (values: ArticleFormValues) => {
+    if (!adminKey) return
+    setSaving(true)
+    try {
+      if (editing) {
+        const updated = await updateArticle(editing.id, values, adminKey)
+        setArticles((current) => current.map((a) => (a.id === editing.id ? updated : a)))
+        toast(`Updated ${values.name}`)
+      } else {
+        const created = await createArticle(values, adminKey)
+        setArticles((current) => [...current, created])
+        toast(`Added ${values.name}`)
+      }
+      setFormOpen(false)
+    } catch (err) {
+      if (!handleAuthError(err)) {
+        toast(err instanceof ApiError ? err.message : 'Could not save article.')
+      }
+    } finally {
+      setSaving(false)
     }
   }
 
-  const handleDelete = () => {
-    if (!deleting) return
-    setArticles((current) => current.filter((a) => a.id !== deleting.id))
-    toast(`Deleted ${deleting.name}`)
-    setDeleting(undefined)
+  const handleDelete = async () => {
+    if (!deleting || !adminKey) return
+    try {
+      await deleteArticle(deleting.id, adminKey)
+      setArticles((current) => current.filter((a) => a.id !== deleting.id))
+      toast(`Deleted ${deleting.name}`)
+    } catch (err) {
+      if (!handleAuthError(err)) {
+        toast(err instanceof ApiError ? err.message : 'Could not delete article.')
+      }
+    } finally {
+      setDeleting(undefined)
+    }
   }
 
   return (
@@ -54,7 +112,17 @@ export function ArticlesPage() {
         </Button>
       </div>
 
-      {articles.length === 0 ? (
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full" />
+          ))}
+        </div>
+      ) : error ? (
+        <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+          {error}
+        </div>
+      ) : articles.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-16 text-center text-neutral-500 dark:text-neutral-400">
           <Package className="h-10 w-10" strokeWidth={1.5} />
           <p>No articles yet.</p>
@@ -82,7 +150,7 @@ export function ArticlesPage() {
                     <div className="line-clamp-1 text-neutral-500 dark:text-neutral-400">{article.description}</div>
                   </td>
                   <td className="px-4 py-3">{article.category}</td>
-                  <td className="px-4 py-3">{article.price} USDT</td>
+                  <td className="px-4 py-3">{article.price} USDC</td>
                   <td className="px-4 py-3">{article.stock}</td>
                   <td className="px-4 py-3">
                     <div className="flex justify-end gap-1">
@@ -106,7 +174,13 @@ export function ArticlesPage() {
         </Card>
       )}
 
-      <ArticleFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSave={handleSave} article={editing} />
+      <ArticleFormDialog
+        open={formOpen}
+        onClose={() => setFormOpen(false)}
+        onSave={handleSave}
+        article={editing}
+        saving={saving}
+      />
 
       <Dialog
         open={!!deleting}

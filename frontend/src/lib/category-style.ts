@@ -18,3 +18,11 @@ export const CATEGORY_BADGE_CLASS: Record<Category, string> = {
   Pants: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
   Accessories: 'bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300',
 }
+
+const DEFAULT_BADGE_CLASS = 'bg-neutral-100 text-neutral-700 dark:bg-neutral-800 dark:text-neutral-300'
+
+// Categories are admin-defined free text on the backend, so this falls back gracefully
+// for anything outside the known/suggested set above instead of rendering `undefined`.
+export function categoryBadgeClass(category: string) {
+  return CATEGORY_BADGE_CLASS[category] ?? DEFAULT_BADGE_CLASS
+}

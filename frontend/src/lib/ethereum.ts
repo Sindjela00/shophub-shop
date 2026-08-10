@@ -69,6 +69,13 @@ export function requestAccountsPermission(provider: EthereumProvider) {
   });
 }
 
+export function sendTransaction(
+  provider: EthereumProvider,
+  tx: { from: string; to: string; data: string; value: string },
+) {
+  return provider.request<string>({ method: 'eth_sendTransaction', params: [tx] })
+}
+
 export async function switchToChain(
   provider: EthereumProvider,
   chain: ChainConfig,

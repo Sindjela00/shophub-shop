@@ -20,9 +20,10 @@ interface ArticleFormDialogProps {
   onClose: () => void
   onSave: (values: ArticleFormValues) => void
   article?: Article
+  saving?: boolean
 }
 
-export function ArticleFormDialog({ open, onClose, onSave, article }: ArticleFormDialogProps) {
+export function ArticleFormDialog({ open, onClose, onSave, article, saving }: ArticleFormDialogProps) {
   const isEdit = !!article
 
   const [name, setName] = useState(article?.name ?? '')
@@ -50,7 +51,6 @@ export function ArticleFormDialog({ open, onClose, onSave, article }: ArticleFor
     if (!Number.isInteger(stockValue) || stockValue < 0) return setError('Stock must be a non-negative whole number.')
 
     onSave({ name: name.trim(), description: description.trim(), price: priceValue, category: category.trim(), stock: stockValue })
-    resetAndClose()
   }
 
   return (
@@ -60,11 +60,11 @@ export function ArticleFormDialog({ open, onClose, onSave, article }: ArticleFor
       title={isEdit ? 'Edit article' : 'Add article'}
       footer={
         <div className="flex justify-end gap-2 border-t border-neutral-200 p-5 dark:border-neutral-800">
-          <Button type="button" variant="outline" onClick={resetAndClose}>
+          <Button type="button" variant="outline" onClick={resetAndClose} disabled={saving}>
             Cancel
           </Button>
-          <Button type="submit" form="article-form">
-            {isEdit ? 'Save changes' : 'Add article'}
+          <Button type="submit" form="article-form" disabled={saving}>
+            {saving ? 'Saving...' : isEdit ? 'Save changes' : 'Add article'}
           </Button>
         </div>
       }
@@ -100,7 +100,7 @@ export function ArticleFormDialog({ open, onClose, onSave, article }: ArticleFor
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label htmlFor="article-price" className="text-sm font-medium">
-              Price (USDT)
+              Price (USDC)
             </label>
             <Input
               id="article-price"
