@@ -1,9 +1,11 @@
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PackageSearch, Search } from 'lucide-react'
-import { products } from '@/data/products'
+import { listArticles } from '@/lib/api'
+import type { Product } from '@/data/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 import { ProductCard } from '@/components/shop/product-card'
 import { CATEGORIES, CATEGORY_STYLE } from '@/lib/category-style'
 
@@ -15,24 +17,47 @@ export function CatalogPage() {
   const category = searchParams.get('category') ?? ''
   const sort = (searchParams.get('sort') as Sort | null) ?? 'featured'
 
-  const filtered = useMemo(() => {
-    const matches = products.filter((product) => {
-      const matchesQuery = product.name.toLowerCase().includes(query.toLowerCase())
-      const matchesCategory = category ? product.category === category : true
-      return matchesQuery && matchesCategory
-    })
+  const [products, setProducts] = useState<Product[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    const timeout = setTimeout(() => {
+      listArticles({ search: query || undefined, category: category || undefined })
+        .then((articles) => {
+          if (cancelled) return
+          setProducts(articles)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setError('Could not load products. Please try again.')
+        })
+        .finally(() => {
+          if (cancelled) return
+          setLoading(false)
+        })
+    }, 250)
+    return () => {
+      cancelled = true
+      clearTimeout(timeout)
+    }
+  }, [query, category])
+
+  const filtered = useMemo(() => {
     switch (sort) {
       case 'price-asc':
-        return [...matches].sort((a, b) => a.price - b.price)
+        return [...products].sort((a, b) => a.price - b.price)
       case 'price-desc':
-        return [...matches].sort((a, b) => b.price - a.price)
+        return [...products].sort((a, b) => b.price - a.price)
       case 'name-asc':
-        return [...matches].sort((a, b) => a.name.localeCompare(b.name))
+        return [...products].sort((a, b) => a.name.localeCompare(b.name))
       default:
-        return matches
+        return products
     }
-  }, [query, category, sort])
+  }, [products, sort])
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams)
@@ -98,24 +123,40 @@ export function CatalogPage() {
           })}
         </div>
 
-        <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
-          Showing {filtered.length} of {products.length} products
-        </p>
-
-        {filtered.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-16 text-center text-neutral-500 dark:text-neutral-400">
-            <PackageSearch className="h-10 w-10" strokeWidth={1.5} />
-            <p>No products match your search.</p>
-            <Button variant="outline" size="sm" onClick={clearFilters}>
-              Clear filters
-            </Button>
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/30 dark:text-red-300">
+            {error}
           </div>
-        ) : (
+        )}
+
+        {loading ? (
           <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((product) => (
-              <ProductCard key={product.id} product={product} />
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} className="aspect-4/5 w-full" />
             ))}
           </div>
+        ) : (
+          <>
+            <p className="mb-4 text-sm text-neutral-500 dark:text-neutral-400">
+              Showing {filtered.length} product{filtered.length === 1 ? '' : 's'}
+            </p>
+
+            {filtered.length === 0 ? (
+              <div className="flex flex-col items-center gap-3 py-16 text-center text-neutral-500 dark:text-neutral-400">
+                <PackageSearch className="h-10 w-10" strokeWidth={1.5} />
+                <p>No products match your search.</p>
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  Clear filters
+                </Button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {filtered.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

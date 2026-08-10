@@ -37,7 +37,7 @@ export function CartPage() {
               <Link to={`/product/${product.id}`} className="font-medium hover:text-brand-600 dark:hover:text-brand-400">
                 {product.name}
               </Link>
-              <span className="text-sm text-neutral-500 dark:text-neutral-400">{product.price} USDT / item</span>
+              <span className="text-sm text-neutral-500 dark:text-neutral-400">{product.price} USDC / item</span>
             </div>
             <div className="flex items-center gap-2">
               <button
@@ -59,7 +59,7 @@ export function CartPage() {
                 <Plus className="h-3.5 w-3.5" />
               </button>
             </div>
-            <span className="w-24 text-right font-medium">{(product.price * quantity).toFixed(0)} USDT</span>
+            <span className="w-24 text-right font-medium">{(product.price * quantity).toFixed(0)} USDC</span>
             <button
               type="button"
               onClick={() => removeItem(product.id)}
@@ -74,7 +74,7 @@ export function CartPage() {
 
       <Card className="mt-6 flex items-center justify-between p-5">
         <span className="text-lg font-semibold">Total</span>
-        <span className="text-lg font-semibold">{total} USDT</span>
+        <span className="text-lg font-semibold">{total} USDC</span>
       </Card>
 
       <div className="mt-6 flex justify-end">

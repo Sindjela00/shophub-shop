@@ -17,7 +17,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
     <div className="border-t border-neutral-200 p-5 dark:border-neutral-800">
       <div className="mb-4 flex items-center justify-between text-base font-semibold">
         <span>Total</span>
-        <span>{total} USDT</span>
+        <span>{total} USDC</span>
       </div>
       <Link to="/checkout" onClick={onClose}>
         <Button className="w-full" size="lg">
@@ -51,7 +51,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
-                <span className="text-sm text-neutral-500 dark:text-neutral-400">{product.price} USDT</span>
+                <span className="text-sm text-neutral-500 dark:text-neutral-400">{product.price} USDC</span>
                 <div className="mt-1 flex items-center gap-2">
                   <button
                     type="button"

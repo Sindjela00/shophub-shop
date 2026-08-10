@@ -52,12 +52,12 @@ export function CheckoutSuccessPage() {
               <span>
                 {product.name} × {quantity}
               </span>
-              <span className="font-medium">{product.price * quantity} USDT</span>
+              <span className="font-medium">{product.price * quantity} USDC</span>
             </div>
           ))}
           <div className="flex justify-between pt-2 text-base font-semibold">
             <span>Total paid</span>
-            <span>{total} USDT</span>
+            <span>{total} USDC</span>
           </div>
         </div>
 

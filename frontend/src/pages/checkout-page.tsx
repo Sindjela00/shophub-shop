@@ -8,8 +8,8 @@ import {
   Wallet,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
-import { SEPOLIA_CHAIN, formatAddress } from "@/lib/ethereum";
-import { delay, generateTxHash } from "@/lib/mock-web3";
+import { SEPOLIA_CHAIN, formatAddress, sendTransaction } from "@/lib/ethereum";
+import { ApiError, checkout, prepareCheckout, syncCartWithLocalItems } from "@/lib/api";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -19,7 +19,13 @@ import { useMetaMask } from "@/hooks/use-metamask";
 import { useState } from "react";
 
 type Step = "review" | "wallet" | "pay";
-type PaymentPhase = "idle" | "pending" | "confirming";
+// idle: ready to confirm. awaiting-signature: preparing the tx + waiting on the wallet
+// popup. pending: tx sent, polling the backend until it's confirmed on-chain. error: a
+// non-recoverable failure (rejected signature, backend error, payment verification failure).
+type PaymentPhase = "idle" | "awaiting-signature" | "pending" | "error";
+
+const POLL_INTERVAL_MS = 2000;
+const MAX_POLL_ATTEMPTS = 30;
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "review", label: "Review" },
@@ -34,6 +40,10 @@ function loadInitialStep(): Step {
   return raw === "wallet" || raw === "pay" ? raw : "review";
 }
 
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 export function CheckoutPage() {
   const { items, total, clear } = useCart();
   const navigate = useNavigate();
@@ -43,6 +53,11 @@ export function CheckoutPage() {
 
   const [step, setStepState] = useState<Step>(loadInitialStep);
   const [paymentPhase, setPaymentPhase] = useState<PaymentPhase>("idle");
+  const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  const [cartId, setCartId] = useState<string | null>(null);
+  const [cartBuilding, setCartBuilding] = useState(false);
+  const [cartError, setCartError] = useState<string | null>(null);
 
   const setStep = (next: Step) => {
     setStepState(next);
@@ -65,25 +80,82 @@ export function CheckoutPage() {
 
   const currentIndex = STEPS.findIndex((s) => s.key === step);
   // Mid-transaction, don't let the user leave or jump between steps.
-  const canNavigate = paymentPhase === "idle";
+  const canNavigate = paymentPhase === "idle" || paymentPhase === "error";
+
+  const buildCart = async () => {
+    setCartBuilding(true);
+    setCartError(null);
+    try {
+      const id = await syncCartWithLocalItems(order.items);
+      setCartId(id);
+    } catch (err) {
+      setCartError(
+        err instanceof ApiError
+          ? err.message
+          : "Could not prepare your order. Please try again.",
+      );
+    } finally {
+      setCartBuilding(false);
+    }
+  };
+
+  const handleGoToPay = () => {
+    setStep("pay");
+    if (!cartId && !cartBuilding) {
+      void buildCart();
+    }
+  };
 
   const handleConfirmPayment = async () => {
-    setPaymentPhase("pending");
-    await delay(1000);
-    setPaymentPhase("confirming");
-    await delay(1500);
+    const provider = window.ethereum;
+    if (!provider || !wallet.address || !cartId) return;
 
-    const txHash = generateTxHash();
-    clear();
-    sessionStorage.removeItem(STEP_STORAGE_KEY);
-    navigate("/checkout/success", {
-      state: {
-        items: order.items,
-        total: order.total,
-        txHash,
-        wallet: wallet.address,
-      },
-    });
+    setPaymentError(null);
+    setPaymentPhase("awaiting-signature");
+
+    try {
+      const pending = await prepareCheckout(cartId, wallet.address);
+      const txHash = await sendTransaction(provider, {
+        from: wallet.address,
+        to: pending.to,
+        data: pending.data,
+        value: pending.value,
+      });
+
+      setPaymentPhase("pending");
+
+      for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+        const result = await checkout(cartId, wallet.address, txHash);
+        if (result.status === "confirmed") {
+          clear();
+          sessionStorage.removeItem(STEP_STORAGE_KEY);
+          navigate("/checkout/success", {
+            state: {
+              items: order.items,
+              total: order.total,
+              txHash,
+              wallet: wallet.address,
+            },
+          });
+          return;
+        }
+        await delay(POLL_INTERVAL_MS);
+      }
+
+      setPaymentError("Payment confirmation timed out. Check your wallet and try again.");
+      setPaymentPhase("error");
+    } catch (err) {
+      const isRejection =
+        err instanceof Object && "code" in err && (err as { code: unknown }).code === 4001;
+      setPaymentError(
+        isRejection
+          ? "Transaction was rejected."
+          : err instanceof ApiError
+            ? err.message
+            : "Payment failed. Please try again.",
+      );
+      setPaymentPhase("error");
+    }
   };
 
   return (
@@ -159,14 +231,14 @@ export function CheckoutPage() {
                   <span className="text-neutral-400">× {quantity}</span>
                 </span>
                 <span className="font-medium">
-                  {product.price * quantity} USDT
+                  {product.price * quantity} USDC
                 </span>
               </div>
             ))}
           </div>
           <div className="flex items-center justify-between border-t border-neutral-200 pt-3 text-base font-semibold dark:border-neutral-800">
             <span>Total</span>
-            <span>{order.total} USDT</span>
+            <span>{order.total} USDC</span>
           </div>
           <Button size="lg" onClick={() => setStep("wallet")}>
             Continue
@@ -274,7 +346,7 @@ export function CheckoutPage() {
                   {formatAddress(wallet.address)}
                 </p>
               </div>
-              <Button size="lg" onClick={() => setStep("pay")}>
+              <Button size="lg" onClick={handleGoToPay}>
                 Pay
               </Button>
               <Button variant="ghost" size="sm" onClick={wallet.changeWallet}>
@@ -296,13 +368,37 @@ export function CheckoutPage() {
             <ShieldCheck className="h-7 w-7" />
           </span>
 
-          {paymentPhase === "idle" && (
+          {cartBuilding && (
+            <div className="flex flex-col items-center gap-2 py-4">
+              <Loader2 className="h-6 w-6 animate-spin text-brand-600 dark:text-brand-400" />
+              <p className="text-sm text-neutral-500 dark:text-neutral-400">
+                Preparing your order...
+              </p>
+            </div>
+          )}
+
+          {!cartBuilding && cartError && (
+            <>
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+              <div>
+                <h2 className="font-medium">Couldn't prepare your order</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  {cartError}
+                </p>
+              </div>
+              <Button size="lg" onClick={() => void buildCart()}>
+                Try again
+              </Button>
+            </>
+          )}
+
+          {!cartBuilding && !cartError && cartId && paymentPhase === "idle" && (
             <>
               <div>
                 <h2 className="font-medium">Confirm payment</h2>
                 <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
                   You are sending{" "}
-                  <span className="font-semibold">{order.total} USDT</span> from
+                  <span className="font-semibold">{order.total} USDC</span> from
                   wallet{" "}
                   <span className="font-mono">
                     {wallet.address && formatAddress(wallet.address)}
@@ -315,22 +411,37 @@ export function CheckoutPage() {
             </>
           )}
 
-          {paymentPhase === "pending" && (
+          {paymentPhase === "awaiting-signature" && (
             <div className="flex flex-col items-center gap-2 py-4">
               <Loader2 className="h-6 w-6 animate-spin text-brand-600 dark:text-brand-400" />
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
-                Transaction sent, awaiting confirmation...
+                Confirm the transaction in your wallet...
               </p>
             </div>
           )}
 
-          {paymentPhase === "confirming" && (
+          {paymentPhase === "pending" && (
             <div className="flex flex-col items-center gap-2 py-4">
               <Loader2 className="h-6 w-6 animate-spin text-brand-600 dark:text-brand-400" />
               <p className="text-sm text-neutral-500 dark:text-neutral-400">
                 Confirming on the blockchain...
               </p>
             </div>
+          )}
+
+          {paymentPhase === "error" && (
+            <>
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+              <div>
+                <h2 className="font-medium">Payment didn't go through</h2>
+                <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+                  {paymentError}
+                </p>
+              </div>
+              <Button size="lg" onClick={() => setPaymentPhase("idle")}>
+                Try again
+              </Button>
+            </>
           )}
         </Card>
       )}

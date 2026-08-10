@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ProductThumbnail } from './product-thumbnail'
 import { useCart } from '@/context/cart-context'
 import { useToast } from '@/context/toast-context'
-import { CATEGORY_BADGE_CLASS } from '@/lib/category-style'
+import { categoryBadgeClass } from '@/lib/category-style'
 
 export function ProductCard({ product }: { product: Product }) {
   const { addItem } = useCart()
@@ -24,11 +24,11 @@ export function ProductCard({ product }: { product: Product }) {
           <Link to={`/product/${product.id}`} className="font-medium hover:text-brand-600 dark:hover:text-brand-400">
             {product.name}
           </Link>
-          <Badge className={CATEGORY_BADGE_CLASS[product.category]}>{product.category}</Badge>
+          <Badge className={categoryBadgeClass(product.category)}>{product.category}</Badge>
         </div>
         <p className="line-clamp-2 text-sm text-neutral-500 dark:text-neutral-400">{product.description}</p>
         <div className="mt-auto flex items-center justify-between pt-2">
-          <span className="text-lg font-semibold">{product.price} USDT</span>
+          <span className="text-lg font-semibold">{product.price} USDC</span>
           {outOfStock ? (
             <Badge variant="destructive">Out of stock</Badge>
           ) : (

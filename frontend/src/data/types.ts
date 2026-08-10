@@ -1,4 +1,4 @@
-export type Category = 'Jackets' | 'T-Shirts' | 'Shoes' | 'Pants' | 'Accessories'
+export type Category = string
 
 export interface Product {
   id: string
@@ -14,14 +14,7 @@ export interface CartItem {
   quantity: number
 }
 
-export interface Article {
-  id: string
-  name: string
-  description: string
-  price: number
-  category: string
-  stock: number
-}
+export type Article = Product
 
 export interface OrderItem {
   articleId: string
