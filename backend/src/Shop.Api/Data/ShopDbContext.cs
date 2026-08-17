@@ -6,6 +6,7 @@ namespace Shop.Api.Data;
 public class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbContext(options)
 {
     public DbSet<Article> Articles => Set<Article>();
+    public DbSet<Category> Categories => Set<Category>();
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Cart> Carts => Set<Cart>();
@@ -16,9 +17,20 @@ public class ShopDbContext(DbContextOptions<ShopDbContext> options) : DbContext(
         modelBuilder.Entity<Article>(entity =>
         {
             entity.Property(a => a.Name).HasMaxLength(200);
-            entity.Property(a => a.Category).HasMaxLength(100);
             entity.Property(a => a.Price).HasPrecision(18, 2);
-            entity.HasIndex(a => a.Category);
+            entity.HasOne(a => a.Category)
+                .WithMany()
+                .HasForeignKey(a => a.CategoryId)
+                // Categories can't be deleted while articles still reference them (see
+                // CategoriesController.Delete) — Restrict makes that the database's own
+                // backstop too, not just an application-level check.
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.Property(c => c.Name).HasMaxLength(100);
+            entity.HasIndex(c => c.Name).IsUnique();
         });
 
         modelBuilder.Entity<Order>(entity =>
