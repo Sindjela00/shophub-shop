@@ -10,11 +10,23 @@ public class CartsEndpointTests(ShopApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
+    private async Task<Guid> CreateCategoryAsync()
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/categories")
+        {
+            Content = JsonContent.Create(new UpsertCategoryRequest($"Category {Guid.NewGuid()}"), options: TestJson.Options),
+        };
+        req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
+        var response = await _client.SendAsync(req);
+        var category = await response.Content.ReadFromJsonAsync<CategoryDto>(TestJson.Options);
+        return category!.Id;
+    }
+
     private async Task<ArticleDto> CreateArticleAsync(decimal price = 10m, int stock = 5)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/articles")
         {
-            Content = JsonContent.Create(new UpsertArticleRequest($"Cart Test Item {Guid.NewGuid()}", "desc", price, "CartTest", stock), options: TestJson.Options),
+            Content = JsonContent.Create(new UpsertArticleRequest($"Cart Test Item {Guid.NewGuid()}", "desc", price, await CreateCategoryAsync(), stock), options: TestJson.Options),
         };
         req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
         var response = await _client.SendAsync(req);

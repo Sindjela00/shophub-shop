@@ -20,11 +20,23 @@ public class OrdersAndCheckoutEndpointTests
         _factory.PaymentVerification.Result = PaymentVerificationResult.Verified();
     }
 
+    private async Task<Guid> CreateCategoryAsync()
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/categories")
+        {
+            Content = JsonContent.Create(new UpsertCategoryRequest($"Category {Guid.NewGuid()}"), options: TestJson.Options),
+        };
+        req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
+        var response = await _client.SendAsync(req);
+        var category = await response.Content.ReadFromJsonAsync<CategoryDto>(TestJson.Options);
+        return category!.Id;
+    }
+
     private async Task<ArticleDto> CreateArticleAsync(decimal price = 20m, int stock = 10)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/articles")
         {
-            Content = JsonContent.Create(new UpsertArticleRequest($"Order Test Item {Guid.NewGuid()}", "desc", price, "OrderTest", stock), options: TestJson.Options),
+            Content = JsonContent.Create(new UpsertArticleRequest($"Order Test Item {Guid.NewGuid()}", "desc", price, await CreateCategoryAsync(), stock), options: TestJson.Options),
         };
         req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
         var response = await _client.SendAsync(req);
@@ -194,7 +206,7 @@ public class OrdersAndCheckoutEndpointTests
         // Admin sells out the stock after the item was added to the cart.
         var updateReq = new HttpRequestMessage(HttpMethod.Put, $"/api/articles/{article.Id}")
         {
-            Content = JsonContent.Create(new UpsertArticleRequest(article.Name, article.Description, article.Price, article.Category, 0), options: TestJson.Options),
+            Content = JsonContent.Create(new UpsertArticleRequest(article.Name, article.Description, article.Price, article.CategoryId, 0), options: TestJson.Options),
         };
         updateReq.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
         await _client.SendAsync(updateReq);
