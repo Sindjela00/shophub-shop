@@ -34,8 +34,14 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
     app.UseCors(DevCorsPolicy);
+}
 
-    using var scope = app.Services.CreateScope();
+// Unlike shophub-app's shared, persistent database, every shop gets its own fresh database
+// provisioned by shophub-shop-operator specifically for this instance — there's no existing
+// schema to protect and no scenario where the migration would be unwanted, so this runs
+// unconditionally rather than being gated to Development.
+using (var scope = app.Services.CreateScope())
+{
     await scope.ServiceProvider.GetRequiredService<ShopDbContext>().Database.MigrateAsync();
 }
 
