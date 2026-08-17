@@ -10,14 +10,28 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
-    private static UpsertArticleRequest NewArticleRequest(string? name = null, string category = "IntegrationTest") =>
-        new(name ?? $"Test Article {Guid.NewGuid()}", "desc", 20m, category, 10);
+    private async Task<Guid> CreateCategoryAsync(string? name = null)
+    {
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/categories")
+        {
+            Content = JsonContent.Create(new UpsertCategoryRequest(name ?? $"Category {Guid.NewGuid()}"), options: TestJson.Options),
+        };
+        req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
+
+        var response = await _client.SendAsync(req);
+        response.EnsureSuccessStatusCode();
+        var category = await response.Content.ReadFromJsonAsync<CategoryDto>(TestJson.Options);
+        return category!.Id;
+    }
+
+    private async Task<UpsertArticleRequest> NewArticleRequestAsync(string? name = null, Guid? categoryId = null) =>
+        new(name ?? $"Test Article {Guid.NewGuid()}", "desc", 20m, categoryId ?? await CreateCategoryAsync(), 10);
 
     private async Task<ArticleDto> CreateArticleAsync(UpsertArticleRequest? request = null)
     {
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/articles")
         {
-            Content = JsonContent.Create(request ?? NewArticleRequest(), options: TestJson.Options),
+            Content = JsonContent.Create(request ?? await NewArticleRequestAsync(), options: TestJson.Options),
         };
         req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
 
@@ -29,7 +43,7 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
     [Fact]
     public async Task Create_with_admin_key_returns_201_with_the_created_article()
     {
-        var request = NewArticleRequest("Aurora Windbreaker");
+        var request = await NewArticleRequestAsync("Aurora Windbreaker");
 
         var req = new HttpRequestMessage(HttpMethod.Post, "/api/articles") { Content = JsonContent.Create(request, options: TestJson.Options) };
         req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
@@ -39,14 +53,27 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
         var article = await response.Content.ReadFromJsonAsync<ArticleDto>(TestJson.Options);
         Assert.Equal("Aurora Windbreaker", article!.Name);
         Assert.Equal(20m, article.Price);
+        Assert.Equal(request.CategoryId, article.CategoryId);
     }
 
     [Fact]
     public async Task Create_without_admin_key_returns_401()
     {
-        var response = await _client.PostAsJsonAsync("/api/articles", NewArticleRequest(), TestJson.Options);
+        var response = await _client.PostAsJsonAsync("/api/articles", await NewArticleRequestAsync(), TestJson.Options);
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Create_with_unknown_category_id_returns_400()
+    {
+        var request = await NewArticleRequestAsync(categoryId: Guid.NewGuid());
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/articles") { Content = JsonContent.Create(request, options: TestJson.Options) };
+        req.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
+
+        var response = await _client.SendAsync(req);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -70,12 +97,13 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
     }
 
     [Fact]
-    public async Task Update_changes_the_articles_fields()
+    public async Task Update_changes_the_articles_fields_including_category()
     {
         var created = await CreateArticleAsync();
+        var newCategoryId = await CreateCategoryAsync();
         var updateReq = new HttpRequestMessage(HttpMethod.Put, $"/api/articles/{created.Id}")
         {
-            Content = JsonContent.Create(new UpsertArticleRequest("Renamed", "new desc", 99m, "NewCat", 3), options: TestJson.Options),
+            Content = JsonContent.Create(new UpsertArticleRequest("Renamed", "new desc", 99m, newCategoryId, 3), options: TestJson.Options),
         };
         updateReq.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
 
@@ -86,6 +114,22 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
         Assert.Equal("Renamed", updated!.Name);
         Assert.Equal(99m, updated.Price);
         Assert.Equal(3, updated.Stock);
+        Assert.Equal(newCategoryId, updated.CategoryId);
+    }
+
+    [Fact]
+    public async Task Update_with_unknown_category_id_returns_400()
+    {
+        var created = await CreateArticleAsync();
+        var updateReq = new HttpRequestMessage(HttpMethod.Put, $"/api/articles/{created.Id}")
+        {
+            Content = JsonContent.Create(new UpsertArticleRequest(created.Name, created.Description, created.Price, Guid.NewGuid(), created.Stock), options: TestJson.Options),
+        };
+        updateReq.Headers.Add("X-Admin-Key", ShopApiFactory.AdminApiKey);
+
+        var response = await _client.SendAsync(updateReq);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
@@ -106,7 +150,7 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
     public async Task List_with_search_finds_the_article_by_a_unique_name_fragment()
     {
         var uniqueName = $"Zzyzx-{Guid.NewGuid():N}";
-        await CreateArticleAsync(NewArticleRequest(uniqueName));
+        await CreateArticleAsync(await NewArticleRequestAsync(uniqueName));
 
         var response = await _client.GetAsync($"/api/articles?search={uniqueName}");
 
@@ -118,15 +162,17 @@ public class ArticlesEndpointTests(ShopApiFactory factory)
     [Fact]
     public async Task List_with_category_filters_to_that_category_only()
     {
-        var uniqueCategory = $"Cat-{Guid.NewGuid():N}";
-        await CreateArticleAsync(NewArticleRequest(category: uniqueCategory));
-        await CreateArticleAsync(NewArticleRequest(category: uniqueCategory));
-        await CreateArticleAsync(NewArticleRequest(category: "SomeOtherCategory"));
+        var uniqueCategoryName = $"Cat-{Guid.NewGuid():N}";
+        var categoryId = await CreateCategoryAsync(uniqueCategoryName);
+        var otherCategoryId = await CreateCategoryAsync();
+        await CreateArticleAsync(await NewArticleRequestAsync(categoryId: categoryId));
+        await CreateArticleAsync(await NewArticleRequestAsync(categoryId: categoryId));
+        await CreateArticleAsync(await NewArticleRequestAsync(categoryId: otherCategoryId));
 
-        var response = await _client.GetAsync($"/api/articles?category={uniqueCategory}");
+        var response = await _client.GetAsync($"/api/articles?category={uniqueCategoryName}");
 
         var articles = await response.Content.ReadFromJsonAsync<List<ArticleDto>>(TestJson.Options);
         Assert.Equal(2, articles!.Count);
-        Assert.All(articles, a => Assert.Equal(uniqueCategory, a.Category));
+        Assert.All(articles, a => Assert.Equal(uniqueCategoryName, a.CategoryName));
     }
 }

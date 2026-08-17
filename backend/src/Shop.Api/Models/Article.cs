@@ -6,6 +6,7 @@ public class Article
     public required string Name { get; set; }
     public string Description { get; set; } = string.Empty;
     public required decimal Price { get; set; }
-    public required string Category { get; set; }
+    public required Guid CategoryId { get; set; }
+    public Category? Category { get; set; }
     public required int Stock { get; set; }
 }

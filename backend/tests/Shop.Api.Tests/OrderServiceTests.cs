@@ -22,7 +22,7 @@ public class OrderServiceTests
         Name = name,
         Description = "desc",
         Price = price,
-        Category = "Test",
+        CategoryId = Guid.NewGuid(),
         Stock = stock,
     };
 
