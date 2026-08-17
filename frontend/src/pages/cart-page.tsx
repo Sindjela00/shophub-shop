@@ -32,7 +32,7 @@ export function CartPage() {
       <div className="flex flex-col gap-4">
         {items.map(({ product, quantity }) => (
           <Card key={product.id} className="flex items-center gap-4 p-4">
-            <ProductThumbnail category={product.category} className="w-20 flex-shrink-0" />
+            <ProductThumbnail category={product.categoryName} className="w-20 flex-shrink-0" />
             <div className="flex flex-1 flex-col gap-1">
               <Link to={`/product/${product.id}`} className="font-medium hover:text-brand-600 dark:hover:text-brand-400">
                 {product.name}

@@ -4,14 +4,13 @@ import { Dialog } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import type { Article } from '@/data/types'
-import { CATEGORIES } from '@/lib/category-style'
+import type { Article, Category } from '@/data/types'
 
 export interface ArticleFormValues {
   name: string
   description: string
   price: number
-  category: string
+  categoryId: string
   stock: number
 }
 
@@ -20,16 +19,17 @@ interface ArticleFormDialogProps {
   onClose: () => void
   onSave: (values: ArticleFormValues) => void
   article?: Article
+  categories: Category[]
   saving?: boolean
 }
 
-export function ArticleFormDialog({ open, onClose, onSave, article, saving }: ArticleFormDialogProps) {
+export function ArticleFormDialog({ open, onClose, onSave, article, categories, saving }: ArticleFormDialogProps) {
   const isEdit = !!article
 
   const [name, setName] = useState(article?.name ?? '')
   const [description, setDescription] = useState(article?.description ?? '')
   const [price, setPrice] = useState(article ? String(article.price) : '')
-  const [category, setCategory] = useState(article?.category ?? '')
+  const [categoryId, setCategoryId] = useState(article?.categoryId ?? '')
   const [stock, setStock] = useState(article ? String(article.stock) : '')
   const [error, setError] = useState<string | null>(null)
 
@@ -46,11 +46,11 @@ export function ArticleFormDialog({ open, onClose, onSave, article, saving }: Ar
     const stockValue = Number(stock)
 
     if (!name.trim()) return setError('Name is required.')
-    if (!category.trim()) return setError('Category is required.')
+    if (!categoryId) return setError('Category is required.')
     if (!Number.isFinite(priceValue) || priceValue < 0) return setError('Price must be a non-negative number.')
     if (!Number.isInteger(stockValue) || stockValue < 0) return setError('Stock must be a non-negative whole number.')
 
-    onSave({ name: name.trim(), description: description.trim(), price: priceValue, category: category.trim(), stock: stockValue })
+    onSave({ name: name.trim(), description: description.trim(), price: priceValue, categoryId, stock: stockValue })
   }
 
   return (
@@ -133,18 +133,22 @@ export function ArticleFormDialog({ open, onClose, onSave, article, saving }: Ar
           <label htmlFor="article-category" className="text-sm font-medium">
             Category
           </label>
-          <Input
+          <select
             id="article-category"
-            list="article-category-options"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            placeholder="e.g. Jackets"
-          />
-          <datalist id="article-category-options">
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c} />
+            value={categoryId}
+            onChange={(e) => setCategoryId(e.target.value)}
+            disabled={categories.length === 0}
+            className="h-10 w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-3 text-sm text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:cursor-not-allowed disabled:opacity-60 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          >
+            <option value="" disabled>
+              {categories.length === 0 ? 'No categories yet — add one first' : 'Select a category'}
+            </option>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
             ))}
-          </datalist>
+          </select>
         </div>
       </form>
     </Dialog>
