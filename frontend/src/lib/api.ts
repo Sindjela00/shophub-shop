@@ -1,4 +1,4 @@
-import type { Article, CartItem as LocalCartItem, Order } from '@/data/types'
+import type { Article, CartItem as LocalCartItem, Category, Order } from '@/data/types'
 
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5022'
 
@@ -64,7 +64,7 @@ export interface UpsertArticleBody {
   name: string
   description: string
   price: number
-  category: string
+  categoryId: string
   stock: number
 }
 
@@ -86,6 +86,35 @@ export function updateArticle(id: string, body: UpsertArticleBody, adminKey: str
 
 export function deleteArticle(id: string, adminKey: string) {
   return request<void>(`/api/articles/${id}`, {
+    method: 'DELETE',
+    headers: adminHeaders(adminKey),
+  })
+}
+
+// Categories
+
+export function listCategories() {
+  return request<Category[]>('/api/categories')
+}
+
+export function createCategory(name: string, adminKey: string) {
+  return request<Category>('/api/categories', {
+    method: 'POST',
+    headers: adminHeaders(adminKey),
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function updateCategory(id: string, name: string, adminKey: string) {
+  return request<Category>(`/api/categories/${id}`, {
+    method: 'PUT',
+    headers: adminHeaders(adminKey),
+    body: JSON.stringify({ name }),
+  })
+}
+
+export function deleteCategory(id: string, adminKey: string) {
+  return request<void>(`/api/categories/${id}`, {
     method: 'DELETE',
     headers: adminHeaders(adminKey),
   })

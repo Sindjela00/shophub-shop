@@ -6,14 +6,15 @@ import { Dialog } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/context/toast-context'
 import { useAdminAuth } from '@/context/admin-auth-context'
-import { ApiError, createArticle, deleteArticle, listArticles, updateArticle } from '@/lib/api'
-import type { Article } from '@/data/types'
+import { ApiError, createArticle, deleteArticle, listArticles, listCategories, updateArticle } from '@/lib/api'
+import type { Article, Category } from '@/data/types'
 import { ArticleFormDialog, type ArticleFormValues } from './article-form-dialog'
 
 export function ArticlesPage() {
   const { toast } = useToast()
   const { adminKey, clearAdminKey } = useAdminAuth()
   const [articles, setArticles] = useState<Article[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -25,7 +26,7 @@ export function ArticlesPage() {
   const handleAuthError = (err: unknown) => {
     if (err instanceof ApiError && err.status === 401) {
       clearAdminKey()
-      toast('Invalid admin key')
+      toast('Invalid admin key', 'error')
       return true
     }
     return false
@@ -35,10 +36,11 @@ export function ArticlesPage() {
     let cancelled = false
     setLoading(true)
     setError(null)
-    listArticles()
-      .then((data) => {
+    Promise.all([listArticles(), listCategories()])
+      .then(([articleData, categoryData]) => {
         if (cancelled) return
-        setArticles(data)
+        setArticles(articleData)
+        setCategories(categoryData)
       })
       .catch((err) => {
         if (cancelled) return
@@ -80,7 +82,7 @@ export function ArticlesPage() {
       setFormOpen(false)
     } catch (err) {
       if (!handleAuthError(err)) {
-        toast(err instanceof ApiError ? err.message : 'Could not save article.')
+        toast(err instanceof ApiError ? err.message : 'Could not save article.', 'error')
       }
     } finally {
       setSaving(false)
@@ -95,7 +97,7 @@ export function ArticlesPage() {
       toast(`Deleted ${deleting.name}`)
     } catch (err) {
       if (!handleAuthError(err)) {
-        toast(err instanceof ApiError ? err.message : 'Could not delete article.')
+        toast(err instanceof ApiError ? err.message : 'Could not delete article.', 'error')
       }
     } finally {
       setDeleting(undefined)
@@ -131,8 +133,8 @@ export function ArticlesPage() {
           </Button>
         </div>
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <Card className="w-full overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
             <thead className="border-b border-neutral-200 text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <tr>
                 <th className="px-4 py-3 font-medium">Name</th>
@@ -149,7 +151,7 @@ export function ArticlesPage() {
                     <div className="font-medium">{article.name}</div>
                     <div className="line-clamp-1 text-neutral-500 dark:text-neutral-400">{article.description}</div>
                   </td>
-                  <td className="px-4 py-3">{article.category}</td>
+                  <td className="px-4 py-3">{article.categoryName}</td>
                   <td className="px-4 py-3">{article.price} USDC</td>
                   <td className="px-4 py-3">{article.stock}</td>
                   <td className="px-4 py-3">
@@ -175,10 +177,17 @@ export function ArticlesPage() {
       )}
 
       <ArticleFormDialog
+        // The dialog stays mounted while closed (its open/close transition depends on that),
+        // so its internal useState(article?.x ?? '') initializers only ever run once — without
+        // a key forcing a remount per article, editing a different article after the first
+        // would keep showing whatever was left over from before instead of that article's
+        // actual values.
+        key={editing?.id ?? 'new'}
         open={formOpen}
         onClose={() => setFormOpen(false)}
         onSave={handleSave}
         article={editing}
+        categories={categories}
         saving={saving}
       />
 

@@ -10,6 +10,7 @@ import { CartPage } from '@/pages/cart-page'
 import { CheckoutPage } from '@/pages/checkout-page'
 import { CheckoutSuccessPage } from '@/pages/checkout-success-page'
 import { ArticlesPage } from '@/pages/admin/articles-page'
+import { CategoriesPage } from '@/pages/admin/categories-page'
 import { OrdersPage } from '@/pages/admin/orders-page'
 
 function StorefrontLayout() {
@@ -41,6 +42,7 @@ function App() {
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<Navigate to="/admin/articles" replace />} />
               <Route path="/admin/articles" element={<ArticlesPage />} />
+              <Route path="/admin/categories" element={<CategoriesPage />} />
               <Route path="/admin/orders" element={<OrdersPage />} />
             </Route>
           </Routes>

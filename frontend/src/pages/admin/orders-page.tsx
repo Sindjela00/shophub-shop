@@ -31,7 +31,7 @@ export function OrdersPage() {
         if (cancelled) return
         if (err instanceof ApiError && err.status === 401) {
           clearAdminKey()
-          toast('Invalid admin key')
+          toast('Invalid admin key', 'error')
         } else {
           setError('Could not load orders.')
         }
@@ -66,8 +66,8 @@ export function OrdersPage() {
           <p>No orders yet.</p>
         </div>
       ) : (
-        <Card className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+        <Card className="w-full overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
             <thead className="border-b border-neutral-200 text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
               <tr>
                 <th className="w-8 px-4 py-3" />

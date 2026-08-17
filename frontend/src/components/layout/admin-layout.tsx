@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 
 const NAV_ITEMS = [
   { to: '/admin/articles', label: 'Articles' },
+  { to: '/admin/categories', label: 'Categories' },
   { to: '/admin/orders', label: 'Orders' },
 ]
 
