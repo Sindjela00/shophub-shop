@@ -1,13 +1,16 @@
 import { createContext, useCallback, useContext, useState, type ReactNode } from 'react'
 import { ToastViewport } from '@/components/ui/toast'
 
+export type ToastVariant = 'success' | 'error'
+
 export interface ToastItem {
   id: number
   message: string
+  variant: ToastVariant
 }
 
 interface ToastContextValue {
-  toast: (message: string) => void
+  toast: (message: string, variant?: ToastVariant) => void
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null)
@@ -22,10 +25,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const toast = useCallback(
-    (message: string) => {
+    (message: string, variant: ToastVariant = 'success') => {
       const id = nextId++
-      setToasts((current) => [...current, { id, message }])
-      setTimeout(() => dismiss(id), 2500)
+      setToasts((current) => [...current, { id, message, variant }])
+      // Errors tend to run longer (e.g. "reassign or delete them first") and are worth
+      // more than a glance — give them more time on screen than a quick confirmation.
+      setTimeout(() => dismiss(id), variant === 'error' ? 4500 : 2500)
     },
     [dismiss],
   )

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PackageSearch, Search } from 'lucide-react'
-import { listArticles } from '@/lib/api'
-import type { Product } from '@/data/types'
+import { listArticles, listCategories } from '@/lib/api'
+import type { Category, Product } from '@/data/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ProductCard } from '@/components/shop/product-card'
-import { CATEGORIES, CATEGORY_STYLE } from '@/lib/category-style'
+import { categoryStyle } from '@/lib/category-style'
 
 type Sort = 'featured' | 'price-asc' | 'price-desc' | 'name-asc'
 
@@ -18,8 +18,19 @@ export function CatalogPage() {
   const sort = (searchParams.get('sort') as Sort | null) ?? 'featured'
 
   const [products, setProducts] = useState<Product[]>([])
+  const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    listCategories().then((data) => {
+      if (!cancelled) setCategories(data)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -107,17 +118,17 @@ export function CatalogPage() {
           <Button size="sm" variant={category === '' ? 'default' : 'outline'} onClick={() => setParam('category', '')}>
             All
           </Button>
-          {CATEGORIES.map((c) => {
-            const { Icon } = CATEGORY_STYLE[c]
+          {categories.map((c) => {
+            const { Icon } = categoryStyle(c.name)
             return (
               <Button
-                key={c}
+                key={c.id}
                 size="sm"
-                variant={category === c ? 'default' : 'outline'}
-                onClick={() => setParam('category', c)}
+                variant={category === c.name ? 'default' : 'outline'}
+                onClick={() => setParam('category', c.name)}
               >
                 <Icon className="h-3.5 w-3.5" />
-                {c}
+                {c.name}
               </Button>
             )
           })}

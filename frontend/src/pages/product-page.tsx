@@ -88,17 +88,17 @@ export function ProductPage() {
       <Breadcrumb
         items={[
           { label: 'Home', to: '/' },
-          { label: product.category, to: `/?category=${encodeURIComponent(product.category)}` },
+          { label: product.categoryName, to: `/?category=${encodeURIComponent(product.categoryName)}` },
           { label: product.name },
         ]}
       />
 
       <div className="grid grid-cols-1 gap-8 sm:grid-cols-2">
-        <ProductThumbnail category={product.category} className="w-full" />
+        <ProductThumbnail category={product.categoryName} className="w-full" />
 
         <div className="flex flex-col gap-4">
           <div>
-            <Badge className={categoryBadgeClass(product.category)}>{product.category}</Badge>
+            <Badge className={categoryBadgeClass(product.categoryName)}>{product.categoryName}</Badge>
             <h1 className="mt-2 text-2xl font-semibold">{product.name}</h1>
           </div>
 

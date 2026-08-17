@@ -38,7 +38,7 @@ export function CartDrawer({ open, onClose }: CartDrawerProps) {
         <div className="flex flex-col gap-4 p-5">
           {items.map(({ product, quantity }) => (
             <div key={product.id} className="flex gap-3">
-              <ProductThumbnail category={product.category} className="w-16 flex-shrink-0" />
+              <ProductThumbnail category={product.categoryName} className="w-16 flex-shrink-0" />
               <div className="flex flex-1 flex-col gap-1">
                 <div className="flex items-start justify-between gap-2">
                   <span className="text-sm font-medium">{product.name}</span>

@@ -17,14 +17,14 @@ export function ProductCard({ product }: { product: Product }) {
   return (
     <Card className="flex flex-col overflow-hidden transition-all duration-200 hover:-translate-y-1 hover:shadow-lg">
       <Link to={`/product/${product.id}`} className="p-4 pb-0">
-        <ProductThumbnail category={product.category} />
+        <ProductThumbnail category={product.categoryName} />
       </Link>
       <CardContent className="flex flex-1 flex-col gap-2 pt-4">
         <div className="flex items-start justify-between gap-2">
           <Link to={`/product/${product.id}`} className="font-medium hover:text-brand-600 dark:hover:text-brand-400">
             {product.name}
           </Link>
-          <Badge className={categoryBadgeClass(product.category)}>{product.category}</Badge>
+          <Badge className={categoryBadgeClass(product.categoryName)}>{product.categoryName}</Badge>
         </div>
         <p className="line-clamp-2 text-sm text-neutral-500 dark:text-neutral-400">{product.description}</p>
         <div className="mt-auto flex items-center justify-between pt-2">
