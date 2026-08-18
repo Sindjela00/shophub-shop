@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { CartProvider } from '@/context/cart-context'
+import { ShopProvider } from '@/context/shop-context'
 import { ToastProvider } from '@/context/toast-context'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
@@ -28,26 +29,28 @@ function StorefrontLayout() {
 function App() {
   return (
     <BrowserRouter>
-      <ToastProvider>
-        <CartProvider>
-          <Routes>
-            <Route element={<StorefrontLayout />}>
-              <Route path="/" element={<CatalogPage />} />
-              <Route path="/product/:id" element={<ProductPage />} />
-              <Route path="/cart" element={<CartPage />} />
-              <Route path="/checkout" element={<CheckoutPage />} />
-              <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
-            </Route>
+      <ShopProvider>
+        <ToastProvider>
+          <CartProvider>
+            <Routes>
+              <Route element={<StorefrontLayout />}>
+                <Route path="/" element={<CatalogPage />} />
+                <Route path="/product/:id" element={<ProductPage />} />
+                <Route path="/cart" element={<CartPage />} />
+                <Route path="/checkout" element={<CheckoutPage />} />
+                <Route path="/checkout/success" element={<CheckoutSuccessPage />} />
+              </Route>
 
-            <Route element={<AdminLayout />}>
-              <Route path="/admin" element={<Navigate to="/admin/articles" replace />} />
-              <Route path="/admin/articles" element={<ArticlesPage />} />
-              <Route path="/admin/categories" element={<CategoriesPage />} />
-              <Route path="/admin/orders" element={<OrdersPage />} />
-            </Route>
-          </Routes>
-        </CartProvider>
-      </ToastProvider>
+              <Route element={<AdminLayout />}>
+                <Route path="/admin" element={<Navigate to="/admin/articles" replace />} />
+                <Route path="/admin/articles" element={<ArticlesPage />} />
+                <Route path="/admin/categories" element={<CategoriesPage />} />
+                <Route path="/admin/orders" element={<OrdersPage />} />
+              </Route>
+            </Routes>
+          </CartProvider>
+        </ToastProvider>
+      </ShopProvider>
     </BrowserRouter>
   )
 }

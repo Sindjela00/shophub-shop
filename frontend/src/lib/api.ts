@@ -41,6 +41,17 @@ function adminHeaders(adminKey: string): HeadersInit {
   return { 'X-Admin-Key': adminKey }
 }
 
+// Shop
+
+export interface ShopDto {
+  name: string
+  description: string
+}
+
+export function getShop() {
+  return request<ShopDto>('/api/shop')
+}
+
 // Articles
 
 export interface ArticleListParams {

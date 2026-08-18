@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { LayoutDashboard, ShoppingCart, Store } from 'lucide-react'
 import { useCart } from '@/context/cart-context'
+import { useShop } from '@/context/shop-context'
 import { CartDrawer } from '@/components/shop/cart-drawer'
 import { cn } from '@/lib/utils'
 
 export function Header() {
   const { itemCount } = useCart()
+  const { name: shopName } = useShop()
   const [cartOpen, setCartOpen] = useState(false)
   const [bump, setBump] = useState(false)
   const previousCount = useRef(itemCount)
@@ -28,7 +30,7 @@ export function Header() {
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-600 text-white dark:bg-brand-500">
             <Store className="h-5 w-5" />
           </span>
-          <span className="text-lg">Nordic Wear</span>
+          <span className="text-lg">{shopName}</span>
         </Link>
 
         <div className="flex items-center gap-1">
