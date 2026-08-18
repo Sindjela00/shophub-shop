@@ -1,6 +1,14 @@
 import type { Article, CartItem as LocalCartItem, Category, Order } from '@/data/types'
+import { basePath } from '@/lib/base-path'
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5022'
+const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5022'
+// An explicitly empty VITE_API_BASE_URL means "same origin as wherever this bundle is being
+// served from" (see backend/Dockerfile) — every request path below is root-absolute (e.g.
+// '/api/articles'), so plain '' is only correct when this app owns its origin root. Proxied
+// through shophub-app's "/shop-proxy/{id}", it doesn't: those root-absolute paths would resolve
+// against ShopHub's own origin instead of back through the proxy to this shop, so the shop's own
+// prefix has to be prepended explicitly.
+export const API_BASE_URL = configuredBaseUrl === '' ? basePath : configuredBaseUrl
 
 export class ApiError extends Error {
   status: number

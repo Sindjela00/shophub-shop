@@ -4,6 +4,7 @@ import { ToastProvider } from '@/context/toast-context'
 import { Header } from '@/components/layout/header'
 import { Footer } from '@/components/layout/footer'
 import { AdminLayout } from '@/components/layout/admin-layout'
+import { basePath } from '@/lib/base-path'
 import { CatalogPage } from '@/pages/catalog-page'
 import { ProductPage } from '@/pages/product-page'
 import { CartPage } from '@/pages/cart-page'
@@ -27,7 +28,7 @@ function StorefrontLayout() {
 
 function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={basePath}>
       <ToastProvider>
         <CartProvider>
           <Routes>
