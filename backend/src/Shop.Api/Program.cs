@@ -21,6 +21,18 @@ builder.Services.AddOpenApi();
 builder.Services.AddScoped<AdminApiKeyFilter>();
 builder.Services.AddScoped<OrderService>();
 builder.Services.Configure<PaymentOptions>(builder.Configuration.GetSection(PaymentOptions.SectionName));
+
+// SHOP_NAME is a flat env var (not Shop__Name), set directly on the container by
+// shophub-shop-operator, so it's read as a top-level configuration key rather than bound
+// from a section the way PaymentOptions is.
+builder.Services.Configure<ShopOptions>(options =>
+{
+    var shopName = builder.Configuration["SHOP_NAME"];
+    if (!string.IsNullOrWhiteSpace(shopName))
+    {
+        options.Name = shopName;
+    }
+});
 builder.Services.AddHttpClient<IPaymentVerificationService, SepoliaTokenPaymentVerificationService>();
 builder.Services.AddDbContext<ShopDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
@@ -40,9 +52,46 @@ if (app.Environment.IsDevelopment())
 // provisioned by shophub-shop-operator specifically for this instance — there's no existing
 // schema to protect and no scenario where the migration would be unwanted, so this runs
 // unconditionally rather than being gated to Development.
+//
+// Multi-replica shops all boot against that same fresh database at once, so without
+// coordination every pod races to run MigrateAsync and whichever loses hits Postgres
+// mid-CREATE TABLE from the winner. A session-level Postgres advisory lock serializes
+// them: only the lock holder actually runs migrations, the rest block on pg_advisory_lock
+// until it's released, then run MigrateAsync themselves too — but by then EF Core's own
+// migration-history check sees everything already applied and no-ops.
 using (var scope = app.Services.CreateScope())
 {
-    await scope.ServiceProvider.GetRequiredService<ShopDbContext>().Database.MigrateAsync();
+    var dbContext = scope.ServiceProvider.GetRequiredService<ShopDbContext>();
+    var connection = dbContext.Database.GetDbConnection();
+    await connection.OpenAsync();
+
+    // Fixed, well-known key for this app's migration lock — arbitrary but constant so every
+    // replica of the same shop contends for the same lock (a distinct key per shop database
+    // isn't needed since each shop already gets its own isolated Postgres database).
+    const long MigrationLockKey = 72061217;
+
+    try
+    {
+        await using (var lockCommand = connection.CreateCommand())
+        {
+            lockCommand.CommandText = "SELECT pg_advisory_lock($1)";
+            var keyParam = lockCommand.CreateParameter();
+            keyParam.Value = MigrationLockKey;
+            lockCommand.Parameters.Add(keyParam);
+            await lockCommand.ExecuteNonQueryAsync();
+        }
+
+        await dbContext.Database.MigrateAsync();
+    }
+    finally
+    {
+        await using var unlockCommand = connection.CreateCommand();
+        unlockCommand.CommandText = "SELECT pg_advisory_unlock($1)";
+        var keyParam = unlockCommand.CreateParameter();
+        keyParam.Value = MigrationLockKey;
+        unlockCommand.Parameters.Add(keyParam);
+        await unlockCommand.ExecuteNonQueryAsync();
+    }
 }
 
 app.UseHttpsRedirection();

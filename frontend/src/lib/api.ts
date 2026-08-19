@@ -91,6 +91,16 @@ export function deleteArticle(id: string, adminKey: string) {
   })
 }
 
+// Shop
+
+export interface ShopInfoDto {
+  name: string
+}
+
+export function getShopInfo() {
+  return request<ShopInfoDto>('/api/shop')
+}
+
 // Categories
 
 export function listCategories() {

@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Store } from 'lucide-react'
 import { listCategories } from '@/lib/api'
+import { useShopInfo } from '@/context/shop-info-context'
 import type { Category } from '@/data/types'
 
 export function Footer() {
   const [categories, setCategories] = useState<Category[]>([])
+  const { shopName } = useShopInfo()
 
   useEffect(() => {
     let cancelled = false
@@ -25,7 +27,7 @@ export function Footer() {
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-600 text-white dark:bg-brand-500">
               <Store className="h-4 w-4" />
             </span>
-            <span>Nordic Wear</span>
+            <span>{shopName}</span>
           </div>
           <p className="text-sm text-neutral-500 dark:text-neutral-400">
             Clothing and gear for every season, powered by ShopHub — crypto payments on testnet.
