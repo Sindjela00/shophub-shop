@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { PackageSearch, Search } from 'lucide-react'
 import { listArticles, listCategories } from '@/lib/api'
+import { useShopInfo } from '@/context/shop-info-context'
 import type { Category, Product } from '@/data/types'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ export function CatalogPage() {
   const category = searchParams.get('category') ?? ''
   const sort = (searchParams.get('sort') as Sort | null) ?? 'featured'
 
+  const { shopName } = useShopInfo()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Category[]>([])
   const [loading, setLoading] = useState(true)
@@ -83,7 +85,7 @@ export function CatalogPage() {
     <div>
       <div className="border-b border-neutral-200 bg-linear-to-br from-brand-600 to-brand-800 dark:border-neutral-800">
         <div className="mx-auto max-w-6xl px-4 py-14 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">Nordic Wear</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">{shopName}</h1>
           <p className="mx-auto mt-3 max-w-md text-brand-100">
             Clothing and gear for every season. Pay instantly with crypto — testnet, no hassle.
           </p>
