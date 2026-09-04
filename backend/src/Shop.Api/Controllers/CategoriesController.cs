@@ -1,28 +1,27 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Shop.Api.Auth;
 using Shop.Api.Contracts;
-using Shop.Api.Data;
 using Shop.Api.Models;
+using Shop.Api.Repositories;
 
 namespace Shop.Api.Controllers;
 
 [ApiController]
 [Route("api/categories")]
-public class CategoriesController(ShopDbContext db) : ControllerBase
+public class CategoriesController(ICategoryRepository categories, IArticleRepository articles) : ControllerBase
 {
     // Customer-facing: populate category filters/menus.
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CategoryDto>>> List()
     {
-        var categories = await db.Categories.AsNoTracking().OrderBy(c => c.Name).ToListAsync();
-        return Ok(categories.Select(CategoryDto.FromEntity));
+        var result = await categories.ListAsync();
+        return Ok(result.Select(CategoryDto.FromEntity));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<CategoryDto>> GetById(Guid id)
     {
-        var category = await db.Categories.AsNoTracking().FirstOrDefaultAsync(c => c.Id == id);
+        var category = await categories.GetByIdAsync(id);
         return category is null ? NotFound() : Ok(CategoryDto.FromEntity(category));
     }
 
@@ -36,14 +35,13 @@ public class CategoriesController(ShopDbContext db) : ControllerBase
             return BadRequest(new ErrorResponse("Name is required."));
         }
 
-        if (await db.Categories.AnyAsync(c => c.Name == request.Name))
+        if (await categories.NameExistsAsync(request.Name))
         {
             return Conflict(new ErrorResponse($"A category named '{request.Name}' already exists."));
         }
 
         var category = new Category { Id = Guid.NewGuid(), Name = request.Name };
-        db.Categories.Add(category);
-        await db.SaveChangesAsync();
+        await categories.CreateAsync(category);
         return CreatedAtAction(nameof(GetById), new { id = category.Id }, CategoryDto.FromEntity(category));
     }
 
@@ -56,19 +54,19 @@ public class CategoriesController(ShopDbContext db) : ControllerBase
             return BadRequest(new ErrorResponse("Name is required."));
         }
 
-        var category = await db.Categories.FindAsync(id);
+        var category = await categories.GetByIdAsync(id);
         if (category is null)
         {
             return NotFound();
         }
 
-        if (await db.Categories.AnyAsync(c => c.Id != id && c.Name == request.Name))
+        if (await categories.NameExistsAsync(request.Name, excludingId: id))
         {
             return Conflict(new ErrorResponse($"A category named '{request.Name}' already exists."));
         }
 
         category.Name = request.Name;
-        await db.SaveChangesAsync();
+        await categories.UpdateAsync(category);
         return Ok(CategoryDto.FromEntity(category));
     }
 
@@ -76,21 +74,20 @@ public class CategoriesController(ShopDbContext db) : ControllerBase
     [ServiceFilter(typeof(AdminApiKeyFilter))]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var category = await db.Categories.FindAsync(id);
+        var category = await categories.GetByIdAsync(id);
         if (category is null)
         {
             return NotFound();
         }
 
-        var articleCount = await db.Articles.CountAsync(a => a.CategoryId == id);
+        var articleCount = await articles.CountByCategoryAsync(id);
         if (articleCount > 0)
         {
             return Conflict(new ErrorResponse(
                 $"'{category.Name}' is still used by {articleCount} article(s). Reassign or delete them first."));
         }
 
-        db.Categories.Remove(category);
-        await db.SaveChangesAsync();
+        await categories.DeleteAsync(id);
         return NoContent();
     }
 }

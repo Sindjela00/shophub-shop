@@ -2,7 +2,11 @@ using Microsoft.EntityFrameworkCore;
 using Shop.Api.Auth;
 using Shop.Api.Data;
 using Shop.Api.Observability;
+using Shop.Api.Repositories;
+using Shop.Api.Repositories.EfCore;
+using Shop.Api.Repositories.Redis;
 using Shop.Api.Services;
+using StackExchange.Redis;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,8 +38,33 @@ builder.Services.Configure<ShopOptions>(options =>
     }
 });
 builder.Services.AddHttpClient<IPaymentVerificationService, SepoliaTokenPaymentVerificationService>();
-builder.Services.AddDbContext<ShopDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+
+// Which storage backend a shop gets is decided by shophub-shop-operator at provisioning time
+// (Shop.spec.databaseKind), not by this app — it just wires up whichever connection string
+// actually shows up in its own config. "standard" tier sets ConnectionStrings:Default
+// (Postgres, via CNPG); "light" tier sets ConnectionStrings:Redis instead. Exactly one of the
+// two is expected to be present; Redis takes precedence if somehow both are (shouldn't happen
+// in practice — the operator only ever sets one or the other for a given shop).
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+var useRedis = !string.IsNullOrWhiteSpace(redisConnectionString);
+
+if (useRedis)
+{
+    builder.Services.AddSingleton<IConnectionMultiplexer>(_ => ConnectionMultiplexer.Connect(redisConnectionString!));
+    builder.Services.AddScoped<IArticleRepository, RedisArticleRepository>();
+    builder.Services.AddScoped<ICategoryRepository, RedisCategoryRepository>();
+    builder.Services.AddScoped<ICartRepository, RedisCartRepository>();
+    builder.Services.AddScoped<IOrderRepository, RedisOrderRepository>();
+}
+else
+{
+    builder.Services.AddDbContext<ShopDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("Default")));
+    builder.Services.AddScoped<IArticleRepository, EfArticleRepository>();
+    builder.Services.AddScoped<ICategoryRepository, EfCategoryRepository>();
+    builder.Services.AddScoped<ICartRepository, EfCartRepository>();
+    builder.Services.AddScoped<IOrderRepository, EfOrderRepository>();
+}
 
 var app = builder.Build();
 
@@ -48,6 +77,9 @@ if (app.Environment.IsDevelopment())
     app.UseCors(DevCorsPolicy);
 }
 
+// Only the "standard" (Postgres/EF Core) tier has a schema to migrate at all — Redis has none,
+// there's nothing for this block to do on the "light" tier.
+//
 // Unlike shophub-app's shared, persistent database, every shop gets its own fresh database
 // provisioned by shophub-shop-operator specifically for this instance — there's no existing
 // schema to protect and no scenario where the migration would be unwanted, so this runs
@@ -59,6 +91,7 @@ if (app.Environment.IsDevelopment())
 // them: only the lock holder actually runs migrations, the rest block on pg_advisory_lock
 // until it's released, then run MigrateAsync themselves too — but by then EF Core's own
 // migration-history check sees everything already applied and no-ops.
+if (!useRedis)
 using (var scope = app.Services.CreateScope())
 {
     var dbContext = scope.ServiceProvider.GetRequiredService<ShopDbContext>();

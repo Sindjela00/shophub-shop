@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Shop.Api.Data;
 using Shop.Api.Models;
+using Shop.Api.Repositories.EfCore;
 using Shop.Api.Services;
 
 namespace Shop.Api.Tests;
@@ -15,6 +16,12 @@ public class OrderServiceTests
             .Options;
         return new ShopDbContext(options);
     }
+
+    // OrderService takes repositories now, not a DbContext directly (so the same service class
+    // works against either storage tier) — tests still exercise the real EF Core repository
+    // implementation against the InMemory provider, just with this one extra layer of indirection.
+    private static OrderService CreateService(ShopDbContext db, Shop.Api.Services.IPaymentVerificationService paymentVerification) =>
+        new(new EfArticleRepository(db), new EfOrderRepository(db), paymentVerification);
 
     private static Article NewArticle(string name = "Test Article", decimal price = 20m, int stock = 10) => new()
     {
@@ -30,7 +37,7 @@ public class OrderServiceTests
     public async Task CreateAsync_fails_when_wallet_address_missing()
     {
         await using var db = CreateContext();
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
 
         var result = await service.CreateAsync("", "0xtx", [new CreateOrderItem(Guid.NewGuid(), 1)]);
 
@@ -43,7 +50,7 @@ public class OrderServiceTests
     public async Task CreateAsync_fails_when_items_empty()
     {
         await using var db = CreateContext();
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
 
         var result = await service.CreateAsync("0xwallet", "0xtx", []);
 
@@ -55,7 +62,7 @@ public class OrderServiceTests
     public async Task CreateAsync_fails_when_quantity_not_positive()
     {
         await using var db = CreateContext();
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
 
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(Guid.NewGuid(), 0)]);
 
@@ -72,7 +79,7 @@ public class OrderServiceTests
         db.Orders.Add(new Order { Id = Guid.NewGuid(), WalletAddress = "0xsomeone", TxHash = "0xused", Total = 1 });
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
         var result = await service.CreateAsync("0xwallet", "0xused", [new CreateOrderItem(article.Id, 1)]);
 
         Assert.False(result.Success);
@@ -83,7 +90,7 @@ public class OrderServiceTests
     public async Task CreateAsync_fails_when_article_not_found()
     {
         await using var db = CreateContext();
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
 
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(Guid.NewGuid(), 1)]);
 
@@ -100,7 +107,7 @@ public class OrderServiceTests
         db.Articles.Add(article);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 5)]);
 
         Assert.False(result.Success);
@@ -117,7 +124,7 @@ public class OrderServiceTests
         await db.SaveChangesAsync();
 
         var fakeVerification = new FakePaymentVerificationService(PaymentVerificationResult.Verified());
-        var service = new OrderService(db, fakeVerification);
+        var service = CreateService(db, fakeVerification);
 
         await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 5)]);
 
@@ -132,7 +139,7 @@ public class OrderServiceTests
         db.Articles.Add(article);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Pending("not mined yet")));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Pending("not mined yet")));
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 1)]);
 
         Assert.False(result.Success);
@@ -149,7 +156,7 @@ public class OrderServiceTests
         db.Articles.Add(article);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Pending("not mined yet")));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Pending("not mined yet")));
         await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 1)]);
 
         Assert.Equal(5, (await db.Articles.FindAsync(article.Id))!.Stock);
@@ -164,7 +171,7 @@ public class OrderServiceTests
         db.Articles.Add(article);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Failed("wrong sender")));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Failed("wrong sender")));
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 1)]);
 
         Assert.False(result.Success);
@@ -180,7 +187,7 @@ public class OrderServiceTests
         db.Articles.Add(article);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 3)]);
 
         Assert.True(result.Success);
@@ -204,7 +211,7 @@ public class OrderServiceTests
         db.Articles.AddRange(a, b);
         await db.SaveChangesAsync();
 
-        var service = new OrderService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
+        var service = CreateService(db, new FakePaymentVerificationService(PaymentVerificationResult.Verified()));
         var result = await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(a.Id, 2), new CreateOrderItem(b.Id, 1)]);
 
         Assert.True(result.Success);
@@ -220,7 +227,7 @@ public class OrderServiceTests
         await db.SaveChangesAsync();
 
         var fakeVerification = new FakePaymentVerificationService(PaymentVerificationResult.Verified());
-        var service = new OrderService(db, fakeVerification);
+        var service = CreateService(db, fakeVerification);
 
         await service.CreateAsync("0xwallet", "0xtx", [new CreateOrderItem(article.Id, 2)]);
 

@@ -1,6 +1,5 @@
-using Microsoft.EntityFrameworkCore;
-using Shop.Api.Data;
 using Shop.Api.Models;
+using Shop.Api.Repositories;
 
 namespace Shop.Api.Services;
 
@@ -21,7 +20,7 @@ public record OrderCreationResult(bool Success, bool IsPending, Order? Order, st
 /// validates the requested items, checks stock, verifies the on-chain payment, then
 /// decrements stock and persists the order — all before anything is considered final.
 /// </summary>
-public class OrderService(ShopDbContext db, IPaymentVerificationService paymentVerification)
+public class OrderService(IArticleRepository articles, IOrderRepository orders, IPaymentVerificationService paymentVerification)
 {
     public async Task<OrderCreationResult> CreateAsync(
         string walletAddress,
@@ -39,15 +38,15 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
             return OrderCreationResult.Fail("Order must contain at least one item with a positive quantity.", StatusCodes.Status400BadRequest);
         }
 
-        if (await db.Orders.AnyAsync(o => o.TxHash == txHash, cancellationToken))
+        if (await orders.TxHashExistsAsync(txHash, cancellationToken))
         {
             return OrderCreationResult.Fail("This transaction has already been used for an order.", StatusCodes.Status409Conflict);
         }
 
         var articleIds = items.Select(i => i.ArticleId).ToList();
-        var articles = await db.Articles.Where(a => articleIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id, cancellationToken);
+        var resolved = await articles.GetByIdsAsync(articleIds, cancellationToken);
 
-        var missingIds = articleIds.Except(articles.Keys).ToList();
+        var missingIds = articleIds.Except(resolved.Keys).ToList();
         if (missingIds.Count > 0)
         {
             return OrderCreationResult.Fail($"Article(s) not found: {string.Join(", ", missingIds)}.", StatusCodes.Status400BadRequest);
@@ -55,7 +54,7 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
 
         foreach (var item in items)
         {
-            var article = articles[item.ArticleId];
+            var article = resolved[item.ArticleId];
             if (article.Stock < item.Quantity)
             {
                 return OrderCreationResult.Fail(
@@ -64,7 +63,7 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
             }
         }
 
-        var total = items.Sum(i => articles[i.ArticleId].Price * i.Quantity);
+        var total = items.Sum(i => resolved[i.ArticleId].Price * i.Quantity);
 
         var verification = await paymentVerification.VerifyAsync(txHash, walletAddress, total, cancellationToken);
         switch (verification.Status)
@@ -86,10 +85,11 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
             Total = total,
         };
 
+        var stockDecrements = new Dictionary<Guid, int>();
         foreach (var item in items)
         {
-            var article = articles[item.ArticleId];
-            article.Stock -= item.Quantity;
+            var article = resolved[item.ArticleId];
+            stockDecrements[article.Id] = stockDecrements.GetValueOrDefault(article.Id) + item.Quantity;
 
             order.Items.Add(new OrderItem
             {
@@ -102,8 +102,7 @@ public class OrderService(ShopDbContext db, IPaymentVerificationService paymentV
             });
         }
 
-        db.Orders.Add(order);
-        await db.SaveChangesAsync(cancellationToken);
+        await orders.CreateAsync(order, stockDecrements, cancellationToken);
 
         return OrderCreationResult.Ok(order);
     }
