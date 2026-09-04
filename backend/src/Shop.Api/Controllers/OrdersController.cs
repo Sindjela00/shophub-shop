@@ -1,27 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Shop.Api.Auth;
 using Shop.Api.Contracts;
-using Shop.Api.Data;
+using Shop.Api.Repositories;
 using Shop.Api.Services;
 
 namespace Shop.Api.Controllers;
 
 [ApiController]
 [Route("api/orders")]
-public class OrdersController(ShopDbContext db, OrderService orderService) : ControllerBase
+public class OrdersController(IOrderRepository orders, OrderService orderService) : ControllerBase
 {
     // Admin-only: review placed orders.
     [HttpGet]
     [ServiceFilter(typeof(AdminApiKeyFilter))]
     public async Task<ActionResult<IEnumerable<OrderDto>>> List()
     {
-        var orders = await db.Orders
-            .AsNoTracking()
-            .Include(o => o.Items)
-            .OrderByDescending(o => o.CreatedAt)
-            .ToListAsync();
-        return Ok(orders.Select(OrderDto.FromEntity));
+        var result = await orders.ListAsync();
+        return Ok(result.Select(OrderDto.FromEntity));
     }
 
     // Called once a crypto payment has been sent; verifies it on-chain before finalizing.

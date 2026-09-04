@@ -1,41 +1,28 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Shop.Api.Auth;
 using Shop.Api.Contracts;
-using Shop.Api.Data;
 using Shop.Api.Models;
+using Shop.Api.Repositories;
 
 namespace Shop.Api.Controllers;
 
 [ApiController]
 [Route("api/articles")]
-public class ArticlesController(ShopDbContext db) : ControllerBase
+public class ArticlesController(IArticleRepository articles, ICategoryRepository categories) : ControllerBase
 {
     // Customer-facing: browse/search the catalog. `category` filters by name (not id) to
     // keep the querystring human-readable/shareable, e.g. ?category=Jackets.
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ArticleDto>>> List([FromQuery] string? search, [FromQuery] string? category)
     {
-        var query = db.Articles.AsNoTracking().Include(a => a.Category).AsQueryable();
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            query = query.Where(a => EF.Functions.ILike(a.Name, $"%{search}%"));
-        }
-
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            query = query.Where(a => a.Category!.Name == category);
-        }
-
-        var articles = await query.OrderBy(a => a.Name).ToListAsync();
-        return Ok(articles.Select(ArticleDto.FromEntity));
+        var result = await articles.ListAsync(search, category);
+        return Ok(result.Select(ArticleDto.FromEntity));
     }
 
     [HttpGet("{id:guid}")]
     public async Task<ActionResult<ArticleDto>> GetById(Guid id)
     {
-        var article = await db.Articles.AsNoTracking().Include(a => a.Category).FirstOrDefaultAsync(a => a.Id == id);
+        var article = await articles.GetByIdAsync(id);
         return article is null ? NotFound() : Ok(ArticleDto.FromEntity(article));
     }
 
@@ -44,7 +31,7 @@ public class ArticlesController(ShopDbContext db) : ControllerBase
     [ServiceFilter(typeof(AdminApiKeyFilter))]
     public async Task<ActionResult<ArticleDto>> Create(UpsertArticleRequest request)
     {
-        var category = await db.Categories.FindAsync(request.CategoryId);
+        var category = await categories.GetByIdAsync(request.CategoryId);
         if (category is null)
         {
             return BadRequest(new ErrorResponse($"Category {request.CategoryId} not found."));
@@ -60,8 +47,7 @@ public class ArticlesController(ShopDbContext db) : ControllerBase
             Category = category,
             Stock = request.Stock,
         };
-        db.Articles.Add(article);
-        await db.SaveChangesAsync();
+        await articles.CreateAsync(article);
         return CreatedAtAction(nameof(GetById), new { id = article.Id }, ArticleDto.FromEntity(article));
     }
 
@@ -69,13 +55,13 @@ public class ArticlesController(ShopDbContext db) : ControllerBase
     [ServiceFilter(typeof(AdminApiKeyFilter))]
     public async Task<ActionResult<ArticleDto>> Update(Guid id, UpsertArticleRequest request)
     {
-        var article = await db.Articles.FindAsync(id);
+        var article = await articles.GetByIdAsync(id);
         if (article is null)
         {
             return NotFound();
         }
 
-        var category = await db.Categories.FindAsync(request.CategoryId);
+        var category = await categories.GetByIdAsync(request.CategoryId);
         if (category is null)
         {
             return BadRequest(new ErrorResponse($"Category {request.CategoryId} not found."));
@@ -87,7 +73,7 @@ public class ArticlesController(ShopDbContext db) : ControllerBase
         article.CategoryId = request.CategoryId;
         article.Category = category;
         article.Stock = request.Stock;
-        await db.SaveChangesAsync();
+        await articles.UpdateAsync(article);
         return Ok(ArticleDto.FromEntity(article));
     }
 
@@ -95,14 +81,7 @@ public class ArticlesController(ShopDbContext db) : ControllerBase
     [ServiceFilter(typeof(AdminApiKeyFilter))]
     public async Task<IActionResult> Delete(Guid id)
     {
-        var article = await db.Articles.FindAsync(id);
-        if (article is null)
-        {
-            return NotFound();
-        }
-
-        db.Articles.Remove(article);
-        await db.SaveChangesAsync();
-        return NoContent();
+        var deleted = await articles.DeleteAsync(id);
+        return deleted ? NoContent() : NotFound();
     }
 }

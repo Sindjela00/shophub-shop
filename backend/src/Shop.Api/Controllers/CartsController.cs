@@ -1,31 +1,31 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Shop.Api.Contracts;
-using Shop.Api.Data;
-using Shop.Api.Models;
+using Shop.Api.Repositories;
 using Shop.Api.Services;
 
 namespace Shop.Api.Controllers;
 
 [ApiController]
 [Route("api/carts")]
-public class CartsController(ShopDbContext db, OrderService orderService, IOptions<PaymentOptions> paymentOptions) : ControllerBase
+public class CartsController(
+    ICartRepository carts,
+    IArticleRepository articles,
+    OrderService orderService,
+    IOptions<PaymentOptions> paymentOptions) : ControllerBase
 {
     [HttpPost]
     public async Task<ActionResult<CartDto>> Create()
     {
-        var cart = new Cart { Id = Guid.NewGuid() };
-        db.Carts.Add(cart);
-        await db.SaveChangesAsync();
-        return CreatedAtAction(nameof(Get), new { cartId = cart.Id }, await BuildDto(cart));
+        var cart = await carts.CreateAsync();
+        return CreatedAtAction(nameof(Get), new { cartId = cart.Id }, await BuildDto(cart.Id, cart.Items));
     }
 
     [HttpGet("{cartId:guid}")]
     public async Task<ActionResult<CartDto>> Get(Guid cartId)
     {
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
-        return cart is null ? NotFound() : Ok(await BuildDto(cart));
+        var cart = await carts.GetAsync(cartId);
+        return cart is null ? NotFound() : Ok(await BuildDto(cart.Id, cart.Items));
     }
 
     [HttpPost("{cartId:guid}/items")]
@@ -36,13 +36,13 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return BadRequest(new ErrorResponse("Quantity must be positive."));
         }
 
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        var cart = await carts.GetAsync(cartId);
         if (cart is null)
         {
             return NotFound();
         }
 
-        var article = await db.Articles.FindAsync(request.ArticleId);
+        var article = await articles.GetByIdAsync(request.ArticleId);
         if (article is null)
         {
             return BadRequest(new ErrorResponse($"Article {request.ArticleId} not found."));
@@ -55,27 +55,15 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available."));
         }
 
-        if (existing is not null)
-        {
-            existing.Quantity = newQuantity;
-        }
-        else
-        {
-            // Adding to an already-tracked Cart's collection navigation isn't enough on its
-            // own: EF sees the pre-assigned Guid key and infers Modified instead of Added.
-            // Adding it to the DbSet directly forces Added state; EF's relationship fixup
-            // then wires it into cart.Items automatically (adding it here too would double it).
-            db.CartItems.Add(new CartItem { Id = Guid.NewGuid(), CartId = cart.Id, ArticleId = article.Id, Quantity = request.Quantity });
-        }
-
-        await db.SaveChangesAsync();
-        return Ok(await BuildDto(cart));
+        await carts.AddItemAsync(cartId, request.ArticleId, request.Quantity);
+        var updated = await carts.GetAsync(cartId);
+        return Ok(await BuildDto(cartId, updated!.Items));
     }
 
     [HttpPut("{cartId:guid}/items/{articleId:guid}")]
     public async Task<ActionResult<CartDto>> SetItemQuantity(Guid cartId, Guid articleId, SetCartItemQuantityRequest request)
     {
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        var cart = await carts.GetAsync(cartId);
         if (cart is null)
         {
             return NotFound();
@@ -87,13 +75,9 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return NotFound();
         }
 
-        if (request.Quantity <= 0)
+        if (request.Quantity > 0)
         {
-            db.CartItems.Remove(existing);
-        }
-        else
-        {
-            var article = await db.Articles.FindAsync(articleId);
+            var article = await articles.GetByIdAsync(articleId);
             if (article is null)
             {
                 return BadRequest(new ErrorResponse($"Article {articleId} not found."));
@@ -103,18 +87,17 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             {
                 return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available."));
             }
-
-            existing.Quantity = request.Quantity;
         }
 
-        await db.SaveChangesAsync();
-        return Ok(await BuildDto(cart));
+        await carts.SetItemQuantityAsync(cartId, articleId, request.Quantity);
+        var updated = await carts.GetAsync(cartId);
+        return Ok(await BuildDto(cartId, updated!.Items));
     }
 
     [HttpDelete("{cartId:guid}/items/{articleId:guid}")]
     public async Task<ActionResult<CartDto>> RemoveItem(Guid cartId, Guid articleId)
     {
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        var cart = await carts.GetAsync(cartId);
         if (cart is null)
         {
             return NotFound();
@@ -126,9 +109,9 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return NotFound();
         }
 
-        db.CartItems.Remove(existing);
-        await db.SaveChangesAsync();
-        return Ok(await BuildDto(cart));
+        await carts.RemoveItemAsync(cartId, articleId);
+        var updated = await carts.GetAsync(cartId);
+        return Ok(await BuildDto(cartId, updated!.Items));
     }
 
     // Builds the unsigned ERC-20 transfer the customer needs to sign: the backend is the
@@ -142,7 +125,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return BadRequest(new ErrorResponse("WalletAddress is required."));
         }
 
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        var cart = await carts.GetAsync(cartId);
         if (cart is null)
         {
             return NotFound();
@@ -154,9 +137,9 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
         }
 
         var articleIds = cart.Items.Select(i => i.ArticleId).ToList();
-        var articles = await db.Articles.Where(a => articleIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id);
+        var resolved = await articles.GetByIdsAsync(articleIds);
 
-        var missingIds = articleIds.Except(articles.Keys).ToList();
+        var missingIds = articleIds.Except(resolved.Keys).ToList();
         if (missingIds.Count > 0)
         {
             return BadRequest(new ErrorResponse($"Article(s) not found: {string.Join(", ", missingIds)}."));
@@ -164,7 +147,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
 
         foreach (var item in cart.Items)
         {
-            var article = articles[item.ArticleId];
+            var article = resolved[item.ArticleId];
             if (article.Stock < item.Quantity)
             {
                 return BadRequest(new ErrorResponse($"Insufficient stock for '{article.Name}': {article.Stock} available, {item.Quantity} requested."));
@@ -177,7 +160,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
             return StatusCode(StatusCodes.Status500InternalServerError, new ErrorResponse("Payment receiving wallet is not configured."));
         }
 
-        var total = cart.Items.Sum(i => articles[i.ArticleId].Price * i.Quantity);
+        var total = cart.Items.Sum(i => resolved[i.ArticleId].Price * i.Quantity);
         var amountSmallestUnit = TokenAmount.ToSmallestUnit(total, opts.TokenDecimals);
         var data = Erc20TransferEncoder.EncodeTransferCallData(opts.ReceivingWalletAddress, amountSmallestUnit);
 
@@ -191,7 +174,7 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
     [HttpPost("{cartId:guid}/checkout")]
     public async Task<ActionResult<OrderDto>> Checkout(Guid cartId, CheckoutRequest request)
     {
-        var cart = await db.Carts.Include(c => c.Items).FirstOrDefaultAsync(c => c.Id == cartId);
+        var cart = await carts.GetAsync(cartId);
         if (cart is null)
         {
             return NotFound();
@@ -211,28 +194,26 @@ public class CartsController(ShopDbContext db, OrderService orderService, IOptio
                 : StatusCode(result.StatusCode, new ErrorResponse(result.Error!));
         }
 
-        db.CartItems.RemoveRange(cart.Items);
-        db.Carts.Remove(cart);
-        await db.SaveChangesAsync();
+        await carts.DeleteAsync(cartId);
 
         return StatusCode(StatusCodes.Status201Created, OrderDto.FromEntity(result.Order!));
     }
 
-    private async Task<CartDto> BuildDto(Cart cart)
+    private async Task<CartDto> BuildDto(Guid cartId, List<Models.CartItem> items)
     {
-        var articleIds = cart.Items.Select(i => i.ArticleId).ToList();
-        var articles = await db.Articles.Where(a => articleIds.Contains(a.Id)).ToDictionaryAsync(a => a.Id);
+        var articleIds = items.Select(i => i.ArticleId).ToList();
+        var resolved = await articles.GetByIdsAsync(articleIds);
 
-        var items = cart.Items
+        var dtoItems = items
             // an article may have been deleted by an admin since it was added to the cart
-            .Where(i => articles.ContainsKey(i.ArticleId))
+            .Where(i => resolved.ContainsKey(i.ArticleId))
             .Select(i =>
             {
-                var article = articles[i.ArticleId];
+                var article = resolved[i.ArticleId];
                 return new CartItemDto(article.Id, article.Name, article.Price, i.Quantity, article.Price * i.Quantity);
             })
             .ToList();
 
-        return new CartDto(cart.Id, items, items.Sum(i => i.LineTotal));
+        return new CartDto(cartId, dtoItems, dtoItems.Sum(i => i.LineTotal));
     }
 }
